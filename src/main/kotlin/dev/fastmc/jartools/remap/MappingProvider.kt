@@ -1,8 +1,8 @@
-package dev.luna5ama.jartools.remap
+package dev.fastmc.jartools.remap
 
-import dev.luna5ama.jartools.util.SubclassInfo
-import dev.luna5ama.jartools.util.annotations
-import dev.luna5ama.jartools.util.containsAnnotation
+import dev.fastmc.jartools.util.SubclassInfo
+import dev.fastmc.jartools.util.annotations
+import dev.fastmc.jartools.util.containsAnnotation
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -15,71 +15,67 @@ import java.io.File
 
 interface MappingProvider {
     suspend fun get(
-        prev: Deferred<Mapping>?,
+        prev: Deferred<ClassMapping>?,
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping
+    ): ClassMapping
 
     suspend fun get(
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping {
+    ): ClassMapping {
         return get(null, classNodes)
     }
 }
 
 class SubClassMappingProvider(private val inputClassNodes: Deferred<Collection<ClassNode>>) : MappingProvider {
     override suspend fun get(
-        prev: Deferred<Mapping>?,
+        prev: Deferred<ClassMapping>?,
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping {
+    ): ClassMapping {
         require(prev != null) { "SubClassMappingProvider requires a previous mapping" }
         return coroutineScope {
             val subclassInfoDeferred = async { SubclassInfo(inputClassNodes.await()) }
 
-            val result: MutableMapping = hashMapOf()
-            prev.await().forEach {
-                result[it.key] = it.value.toMutable()
-            }
+            val result: MutableClassMapping = MutableClassMapping()
+            result.addAll(prev.await())
 
             subclassInfoDeferred.await().forEach { info ->
-                val currentClassMapping = result[info.classNode.name]
+                val currentClassMapping = result.get(info.classNode.name)
                 if (currentClassMapping != null) {
                     info.subclasses.forEach { subclass ->
-                        var set: MutableClassMapping? = null
-                        currentClassMapping.methods.forEach {
+                        var set: MappingEntry.MutableClass? = null
+                        currentClassMapping.methodMapping.entries.forEach {
                             if (set == null) {
-                                set = result.getOrPutEmpty(subclass.classNode.name)
+                                set = result.getOrCreate(subclass.classNode.name)
                             }
-                            set!!.addMethod(MappingEntry.Method(it.nameFrom, it.desc, it.nameTo))
+                            set!!.methodMapping.add(MappingEntry.Method(it.nameFrom, it.desc, it.nameTo))
                         }
-                        currentClassMapping.fields.forEach {
+                        currentClassMapping.fieldMapping.entries.forEach {
                             if (subclass.classNode.fields.none { fieldNode -> fieldNode.name == it.nameFrom }) {
                                 if (set == null) {
-                                    set = result.getOrPutEmpty(subclass.classNode.name)
+                                    set = result.getOrCreate(subclass.classNode.name)
                                 }
-                                set!!.addField(MappingEntry.Field(it.nameFrom, it.nameTo))
+                                set!!.fieldMapping.add(MappingEntry.Field(it.nameFrom, it.nameTo))
                             }
                         }
                     }
                 }
             }
 
-            result
+            result.asImmutable()
         }
     }
 }
 
 class MixinMappingProvider(private val mixinClassesDeferred: Deferred<Map<String, ClassNode>>) : MappingProvider {
     override suspend fun get(
-        prev: Deferred<Mapping>?,
+        prev: Deferred<ClassMapping>?,
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping {
+    ): ClassMapping {
         require(prev != null) { "MixinMappingProvider requires a previous mapping" }
         return coroutineScope {
-            val result: MutableMapping = hashMapOf()
+            val result: MutableClassMapping = MutableClassMapping()
             val prevMapping = prev.await()
-            prevMapping.forEach {
-                result[it.key] = it.value.toMutable()
-            }
+            result.addAll(prevMapping)
 
             mixinClassesDeferred.await().values.forEach { classNode ->
                 classNode.accept(object : ClassVisitor(Opcodes.ASM9) {
@@ -91,25 +87,25 @@ class MixinMappingProvider(private val mixinClassesDeferred: Deferred<Map<String
                                         object : AnnotationVisitor(Opcodes.ASM9) {
                                             override fun visit(n: String?, value: Any) {
                                                 if (value !is Type) return
-                                                prevMapping[value.internalName]?.let { mixinMapping ->
-                                                    var set: MutableClassMapping? = null
-                                                    mixinMapping.methods.forEach {
+                                                prevMapping.get(value.internalName)?.let { mixinMapping ->
+                                                    var set: MappingEntry.MutableClass? = null
+                                                    mixinMapping.methodMapping.entries.forEach {
                                                         if (set == null) {
-                                                            set = result.getOrPutEmpty(classNode.name)
+                                                            set = result.getOrCreate(classNode.name)
                                                         }
-                                                        set!!.addMethod(it)
+                                                        set!!.methodMapping.add(it)
                                                     }
 
-                                                    mixinMapping.fields.forEach loop@{ mapping ->
+                                                    mixinMapping.fieldMapping.entries.forEach loop@{ mapping ->
                                                         if (classNode.fields.none { fieldNode ->
                                                                 fieldNode.name == mapping.nameFrom
-                                                                    && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
+                                                                        && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
                                                             }) return@loop
 
                                                         if (set == null) {
-                                                            set = result.getOrPutEmpty(classNode.name)
+                                                            set = result.getOrCreate(classNode.name)
                                                         }
-                                                        set!!.addField(mapping)
+                                                        set!!.fieldMapping.add(mapping)
                                                     }
                                                 }
                                             }
@@ -126,7 +122,7 @@ class MixinMappingProvider(private val mixinClassesDeferred: Deferred<Map<String
                 })
             }
 
-            result
+            result.asImmutable()
         }
     }
 }
@@ -136,16 +132,16 @@ class SequenceMappingProvider(private vararg val providers: MappingProvider) : M
         require(providers.isNotEmpty()) { "No providers provided" }
     }
 
-    private var cached: Mapping? = null
+    private var cached: ClassMapping? = null
 
     override suspend fun get(
-        prev: Deferred<Mapping>?,
+        prev: Deferred<ClassMapping>?,
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping {
+    ): ClassMapping {
         val cached = cached
         if (cached != null) return cached
 
-        var prevDeferred: Deferred<Mapping>? = prev
+        var prevDeferred: Deferred<ClassMapping>? = prev
         return coroutineScope {
             val deferredList = providers.map {
                 val argDeferred = prevDeferred
@@ -154,13 +150,13 @@ class SequenceMappingProvider(private vararg val providers: MappingProvider) : M
                 current
             }
 
-            val result: MutableMapping = hashMapOf()
+            val result: MutableClassMapping = MutableClassMapping()
             deferredList.forEach { deferred ->
-                mergeMapping(result, deferred.await())
+                result.addAll(deferred.await())
             }
 
-            this@SequenceMappingProvider.cached = result
-            result
+            this@SequenceMappingProvider.cached = result.asImmutable()
+            result.asImmutable()
         }
     }
 }
@@ -170,10 +166,10 @@ class TsrgMappingProvider(private val file: File) : MappingProvider {
         require(file.extension == "tsrg") { "Invalid file $file" }
     }
 
-    private val cached by lazy<Mapping> {
+    private val cached by lazy {
         var skippedHeader = false
-        val result: MutableMapping = hashMapOf()
-        var lastClassMapping: MutableClassMapping? = null
+        val result: MutableClassMapping = MutableClassMapping()
+        var lastClassEntry: MappingEntry.MutableClass? = null
         file.forEachLine {
             if (!skippedHeader) {
                 skippedHeader = true
@@ -182,26 +178,25 @@ class TsrgMappingProvider(private val file: File) : MappingProvider {
 
             if (!it.startsWith("\t")) {
                 val className = it.substringBefore(' ')
-                lastClassMapping = MutableClassMapping(className)
-                result[className] = lastClassMapping!!
+                lastClassEntry = result.getOrCreate(className)
                 return@forEachLine
             }
 
             val split = it.substring(1).split(' ')
             if (split.size == 3) {
-                lastClassMapping!!.addMethod(MappingEntry.Method(split[0], split[1], split[2]))
+                lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))
             } else {
-                lastClassMapping!!.addField(MappingEntry.Field(split[0], split[1]))
+                lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], split[1]))
             }
         }
 
-        result
+        result.asImmutable()
     }
 
     override suspend fun get(
-        prev: Deferred<Mapping>?,
+        prev: Deferred<ClassMapping>?,
         classNodes: Deferred<Collection<ClassNode>>
-    ): Mapping {
+    ): ClassMapping {
         return cached
     }
 }

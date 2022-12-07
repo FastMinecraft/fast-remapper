@@ -1,15 +1,15 @@
-package dev.luna5ama.jartools
+package dev.fastmc.jartools
 
-import dev.luna5ama.jartools.remap.AsmRemapper
-import dev.luna5ama.jartools.remap.Mapping
-import dev.luna5ama.jartools.util.annotations
-import dev.luna5ama.jartools.util.containsAnnotation
+import dev.fastmc.jartools.remap.AsmRemapper
+import dev.fastmc.jartools.remap.ClassMapping
+import dev.fastmc.jartools.util.annotations
+import dev.fastmc.jartools.util.containsAnnotation
 import org.objectweb.asm.tree.ClassNode
 
 class MixinRemapper(
-    mapping: Mapping,
+    classMapping: ClassMapping,
     private val mixinClasses: Map<String, ClassNode>
-) : AsmRemapper(mapping) {
+) : AsmRemapper(classMapping) {
     override fun mapFieldName(owner: String, name: String, descriptor: String): String {
         val classNode =
             mixinClasses[owner] ?: return super.mapFieldName(owner, name, descriptor)

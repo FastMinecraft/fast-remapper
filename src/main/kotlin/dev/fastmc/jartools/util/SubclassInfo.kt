@@ -1,4 +1,4 @@
-package dev.luna5ama.jartools.util
+package dev.fastmc.jartools.util
 
 import org.objectweb.asm.tree.ClassNode
 

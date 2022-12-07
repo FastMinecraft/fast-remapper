@@ -1,4 +1,4 @@
-package dev.luna5ama.jartools
+package dev.fastmc.jartools
 
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassWriter

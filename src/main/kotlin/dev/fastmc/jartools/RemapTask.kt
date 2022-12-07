@@ -1,6 +1,6 @@
-package dev.luna5ama.jartools
+package dev.fastmc.jartools
 
-import dev.luna5ama.jartools.util.split
+import dev.fastmc.jartools.util.split
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async

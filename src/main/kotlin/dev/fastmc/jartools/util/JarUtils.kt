@@ -1,4 +1,4 @@
-package dev.luna5ama.jartools.util
+package dev.fastmc.jartools.util
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*

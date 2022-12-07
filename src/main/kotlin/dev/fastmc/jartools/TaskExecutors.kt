@@ -1,7 +1,7 @@
-package dev.luna5ama.jartools
+package dev.fastmc.jartools
 
-import dev.luna5ama.jartools.util.JarUtils
-import dev.luna5ama.jartools.util.split
+import dev.fastmc.jartools.util.JarUtils
+import dev.fastmc.jartools.util.split
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -36,7 +36,6 @@ class JarTaskExecutors(private val input: File, private val output: File) : Task
 
             launch {
                 result.collect {
-//                    println(it.fileName)
                     modified.add(it.fileName)
                     channel.send(it.fileName to it.classBytes)
                 }
