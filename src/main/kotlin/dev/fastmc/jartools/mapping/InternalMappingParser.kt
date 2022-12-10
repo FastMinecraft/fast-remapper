@@ -1,9 +1,11 @@
-package dev.fastmc.jartools.remap
+package dev.fastmc.jartools.mapping
 
+import dev.fastmc.jartools.util.appendHexLong
+import dev.fastmc.jartools.util.toHexLong
 import java.io.Reader
 
-@Suppress("NOTHING_TO_INLINE", "unused", "MemberVisibilityCanBePrivate")
-object MappingSerialization {
+@Suppress("unused", "MemberVisibilityCanBePrivate")
+object InternalMappingParser {
     fun read(string: String): ClassMapping {
         return read(string.reader())
     }
@@ -21,7 +23,7 @@ object MappingSerialization {
             if (it.isEmpty()) return@forEach
             val split = it.split('\t')
             if (it[0] != '\t') {
-                lastClassEntry = MappingEntry.MutableClass(split[0], split[1], split[2].toHexInt())
+                lastClassEntry = MappingEntry.MutableClass(split[0], split[1], split[2].toHexLong())
                 mapping.add(lastClassEntry!!)
             } else {
                 if (split.size == 5) {
@@ -30,7 +32,7 @@ object MappingSerialization {
                             split[1],
                             split[2],
                             split[3],
-                            split[4].toHexInt()
+                            split[4].toHexLong()
                         )
                     )
                 } else {
@@ -38,7 +40,7 @@ object MappingSerialization {
                         MappingEntry.Field(
                             split[1],
                             split[2],
-                            split[3].toHexInt()
+                            split[3].toHexLong()
                         )
                     )
                 }
@@ -49,7 +51,7 @@ object MappingSerialization {
     }
 
     fun write(appendable: Appendable, classMapping: ClassMapping) {
-        for (entry in classMapping.entries.sortedArray()) {
+        for (entry in classMapping.sortedArray()) {
             write(appendable, entry)
         }
     }
@@ -62,23 +64,23 @@ object MappingSerialization {
         appendable.append('\t')
         appendable.append(entry.nameTo)
         appendable.append('\t')
-        appendable.appendHex(entry.hashCode())
+        appendable.appendHexLong(entry.hashCodeLong())
         appendable.append('\n')
 
         if (!entry.fieldMapping.isEmpty()) {
-            for (field in entry.fieldMapping.entries.sortedArray()) {
+            for (field in entry.fieldMapping.sortedArray()) {
                 appendable.append('\t')
                 appendable.append(field.nameFrom)
                 appendable.append('\t')
                 appendable.append(field.nameTo)
                 appendable.append('\t')
-                appendable.appendHex(field.hashCode())
+                appendable.appendHexLong(field.hashCodeLong())
                 appendable.append('\n')
             }
         }
 
         if (!entry.methodMapping.isEmpty()) {
-            for (method in entry.methodMapping.entries.sortedArray()) {
+            for (method in entry.methodMapping.sortedArray()) {
                 appendable.append('\t')
                 appendable.append(method.nameFrom)
                 appendable.append('\t')
@@ -86,7 +88,7 @@ object MappingSerialization {
                 appendable.append('\t')
                 appendable.append(method.nameTo)
                 appendable.append('\t')
-                appendable.appendHex(method.hashCode())
+                appendable.appendHexLong(method.hashCodeLong())
                 appendable.append('\n')
             }
         }
@@ -94,44 +96,7 @@ object MappingSerialization {
         return appendable
     }
 
-    private inline fun <reified T> Collection<T>.sortedArray(): Array<T> {
-        return this.toTypedArray().apply { sort() }
-    }
-
-    private val hexChars = "0123456789ABCDEF".toCharArray()
-
-    private fun Appendable.appendHex(value: Int): Appendable {
-        append(hexChars[(value ushr 28) and 0xF])
-        append(hexChars[(value ushr 24) and 0xF])
-        append(hexChars[(value ushr 20) and 0xF])
-        append(hexChars[(value ushr 16) and 0xF])
-        append(hexChars[(value ushr 12) and 0xF])
-        append(hexChars[(value ushr 8) and 0xF])
-        append(hexChars[(value ushr 4) and 0xF])
-        append(hexChars[value and 0xF])
-        return this
-    }
-
-    private val hexValues = IntArray(128).apply {
-        for (i in 0..9) {
-            this[i + '0'.code] = i
-        }
-        for (i in 0..5) {
-            this[i + 'A'.code] = i + 10
-            this[i + 'a'.code] = i + 10
-        }
-    }
-
-    private inline fun String.toHexInt(): Int {
-        var value = 0
-        value = value or (hexValues[this[0].code and 0x7F] shl 28)
-        value = value or (hexValues[this[1].code and 0x7F] shl 24)
-        value = value or (hexValues[this[2].code and 0x7F] shl 20)
-        value = value or (hexValues[this[3].code and 0x7F] shl 16)
-        value = value or (hexValues[this[4].code and 0x7F] shl 12)
-        value = value or (hexValues[this[5].code and 0x7F] shl 8)
-        value = value or (hexValues[this[6].code and 0x7F] shl 4)
-        value = value or hexValues[this[7].code and 0x7F]
-        return value
+    private inline fun <reified T : MappingEntry> MappingEntryMap<T>.sortedArray(): Array<T> {
+        return this.backingMap.toTArray<T>().apply { sort() }
     }
 }

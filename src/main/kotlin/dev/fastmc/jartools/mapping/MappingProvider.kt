@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.remap
+package dev.fastmc.jartools.mapping
 
 import dev.fastmc.jartools.util.SubclassInfo
 import dev.fastmc.jartools.util.annotations
@@ -43,13 +43,13 @@ class SubClassMappingProvider(private val inputClassNodes: Deferred<Collection<C
                 if (currentClassMapping != null) {
                     info.subclasses.forEach { subclass ->
                         var set: MappingEntry.MutableClass? = null
-                        currentClassMapping.methodMapping.entries.forEach {
+                        currentClassMapping.methodMapping.backingMap.forEachFast {
                             if (set == null) {
                                 set = result.getOrCreate(subclass.classNode.name)
                             }
                             set!!.methodMapping.add(MappingEntry.Method(it.nameFrom, it.desc, it.nameTo))
                         }
-                        currentClassMapping.fieldMapping.entries.forEach {
+                        currentClassMapping.fieldMapping.backingMap.forEachFast {
                             if (subclass.classNode.fields.none { fieldNode -> fieldNode.name == it.nameFrom }) {
                                 if (set == null) {
                                     set = result.getOrCreate(subclass.classNode.name)
@@ -89,14 +89,14 @@ class MixinMappingProvider(private val mixinClassesDeferred: Deferred<Map<String
                                                 if (value !is Type) return
                                                 prevMapping.get(value.internalName)?.let { mixinMapping ->
                                                     var set: MappingEntry.MutableClass? = null
-                                                    mixinMapping.methodMapping.entries.forEach {
+                                                    mixinMapping.methodMapping.backingMap.forEachFast {
                                                         if (set == null) {
                                                             set = result.getOrCreate(classNode.name)
                                                         }
                                                         set!!.methodMapping.add(it)
                                                     }
 
-                                                    mixinMapping.fieldMapping.entries.forEach loop@{ mapping ->
+                                                    mixinMapping.fieldMapping.backingMap.forEachFast loop@{ mapping ->
                                                         if (classNode.fields.none { fieldNode ->
                                                                 fieldNode.name == mapping.nameFrom
                                                                         && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
@@ -161,36 +161,13 @@ class SequenceMappingProvider(private vararg val providers: MappingProvider) : M
     }
 }
 
-class TsrgMappingProvider(private val file: File) : MappingProvider {
+class Tsrg2MappingProvider(private val file: File) : MappingProvider {
     init {
         require(file.extension == "tsrg") { "Invalid file $file" }
     }
 
     private val cached by lazy {
-        var skippedHeader = false
-        val result: MutableClassMapping = MutableClassMapping()
-        var lastClassEntry: MappingEntry.MutableClass? = null
-        file.forEachLine {
-            if (!skippedHeader) {
-                skippedHeader = true
-                return@forEachLine
-            }
-
-            if (!it.startsWith("\t")) {
-                val className = it.substringBefore(' ')
-                lastClassEntry = result.getOrCreate(className)
-                return@forEachLine
-            }
-
-            val split = it.substring(1).split(' ')
-            if (split.size == 3) {
-                lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))
-            } else {
-                lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], split[1]))
-            }
-        }
-
-        result.asImmutable()
+        ExternalMappingParser.TSRG2.parse(file.reader())
     }
 
     override suspend fun get(

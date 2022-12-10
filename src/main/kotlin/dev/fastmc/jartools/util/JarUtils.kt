@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.*
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.tree.ClassNode
 import java.io.File
-import java.io.InputStream
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -51,25 +50,17 @@ object JarUtils {
             ZipInputStream(input.inputStream().buffered(1024 * 1024)).use { stream ->
                 while (true) {
                     val entry = stream.nextEntry ?: break
-                    emit(entry.name to (if (entry.isDirectory) {
-                        null
-                    } else {
-                        stream.readBytes(entry.size.toInt())
-                    }))
+                    emit(
+                        entry.name to (if (entry.isDirectory) {
+                            null
+                        } else {
+                            val size = entry.size.toInt()
+                            if (size == -1) stream.readBytes() else stream.readNBytes(size)
+                        })
+                    )
                 }
             }
         }
-    }
-
-    private fun InputStream.readBytes(size: Int): ByteArray {
-        val bytes = ByteArray(size)
-        var offset = 0
-        while (offset != size) {
-            val read = read(bytes, offset, bytes.size - offset)
-            if (read == -1) break
-            offset += read
-        }
-        return bytes
     }
 
     suspend fun repackFlow(files: Flow<Pair<String, ByteArray?>>, output: File) {

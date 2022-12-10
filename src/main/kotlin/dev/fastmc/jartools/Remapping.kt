@@ -1,5 +1,8 @@
-package dev.fastmc.jartools.remap
+package dev.fastmc.jartools
 
+import dev.fastmc.jartools.mapping.ClassMapping
+import dev.fastmc.jartools.mapping.get
+import dev.fastmc.jartools.mapping.getNameTo
 import org.objectweb.asm.commons.Remapper
 
 open class AsmRemapper(private val classMapping: ClassMapping) : Remapper() {

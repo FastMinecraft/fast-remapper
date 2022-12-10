@@ -1,13 +1,12 @@
 @file:Suppress("NOTHING_TO_INLINE", "DuplicatedCode", "unused")
 
-package dev.fastmc.jartools.remap
+package dev.fastmc.jartools.mapping
 
-import dev.fastmc.jartools.util.SelfHashMap
 import it.unimi.dsi.fastutil.objects.*
 
 sealed interface MappingEntryMap<T : MappingEntry> {
+    val backingMap: BackingMap<T>
     val size: Int
-    val entries: ObjectCollection<T>
 
     fun isEmpty(): Boolean
 }
@@ -20,19 +19,17 @@ sealed interface MutableMappingEntryMap<T : MappingEntry> : MappingEntryMap<T> {
 
 class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
     MutableMappingEntryMap<T> {
-    val backingMap = SelfHashMap<T>()
+    override val backingMap = BackingMap<T>()
 
     override val size: Int
         get() = backingMap.size
-
-    override val entries = backingMap.values
 
     override fun isEmpty(): Boolean {
         return backingMap.isEmpty()
     }
 
-    inline fun get(hash: Int, compareFunc: (T) -> Boolean): T? {
-        return backingMap.get(hash, compareFunc)
+    inline fun get(hash: Long): T? {
+        return backingMap.get(hash)
     }
 
     override fun add(entry: T) {
@@ -40,16 +37,12 @@ class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
     }
 
     override fun addAll(entries: ObjectCollection<T>) {
-        backingMap.putAll(entries)
+        backingMap.addAll(entries)
     }
 
     override fun addAll(entries: MappingEntryMap<in T>) {
         @Suppress("UNCHECKED_CAST")
-        backingMap.putAll((entries as MutableMappingEntryMapImpl<T>).backingMap)
-    }
-
-    override fun toString(): String {
-        return entries.toString()
+        backingMap.addAll(entries.backingMap as BackingMap<T>)
     }
 }
 
@@ -57,7 +50,7 @@ typealias FieldMappingEntryMap = MappingEntryMap<MappingEntry.Field>
 typealias MutableFieldMappingEntryMap = MutableMappingEntryMap<MappingEntry.Field>
 
 inline fun FieldMappingEntryMap.get(nameFrom: String): MappingEntry.Field? {
-    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Field.hash(nameFrom)) { it.nameFrom == nameFrom }
+    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Field.hash(nameFrom))
 }
 
 @JvmName("fieldGetNameTo")
@@ -74,7 +67,7 @@ inline fun MethodMappingEntryMap.get(nameFrom: String, desc: String): MappingEnt
             nameFrom,
             desc
         )
-    ) { it.nameFrom == nameFrom && it.desc == desc }
+    )
 }
 
 inline fun MethodMappingEntryMap.getNameTo(nameFrom: String, desc: String): String? {
@@ -94,7 +87,7 @@ inline fun MutableClassMapping.asImmutable(): ClassMapping {
 }
 
 inline fun ClassMapping.get(nameFrom: String): MappingEntry.Class? {
-    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom)) { it.nameFrom == nameFrom }
+    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom))
 }
 
 @JvmName("classGetNameTo")
@@ -103,7 +96,7 @@ inline fun ClassMapping.getNameTo(nameFrom: String): String? {
 }
 
 inline fun MutableClassMapping.get(nameFrom: String): MappingEntry.MutableClass? {
-    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom)) { it.nameFrom == nameFrom }
+    return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom))
 }
 
 inline fun MutableClassMapping.getNameTo(nameFrom: String): String? {
@@ -112,7 +105,7 @@ inline fun MutableClassMapping.getNameTo(nameFrom: String): String? {
 
 inline fun MutableClassMapping.getOrCreate(name: String): MappingEntry.MutableClass {
     val key = MappingEntry.Class.hash(name)
-    var mapping = (this as MutableMappingEntryMapImpl).get(key) { it.nameFrom == name }
+    var mapping = (this as MutableMappingEntryMapImpl).get(key)
     if (mapping == null) {
         mapping = MappingEntry.MutableClass(name, name, key)
         add(mapping)
@@ -122,7 +115,7 @@ inline fun MutableClassMapping.getOrCreate(name: String): MappingEntry.MutableCl
 
 inline fun MutableClassMapping.getOrCreate(nameFrom: String, nameTo: String): MappingEntry.MutableClass {
     val key = MappingEntry.Class.hash(nameFrom)
-    var mapping = (this as MutableMappingEntryMapImpl).get(key) { it.nameFrom == nameFrom }
+    var mapping = (this as MutableMappingEntryMapImpl).get(key)
     if (mapping == null) {
         mapping = MappingEntry.MutableClass(nameFrom, nameTo, key)
         add(mapping)
@@ -135,12 +128,12 @@ sealed class MappingEntry constructor(
     val nameFrom: String,
     val nameTo: String,
     protected val hashCache: HashCache
-) : Comparable<MappingEntry> {
+) : Comparable<MappingEntry>, LongHashCode {
     constructor(nameFrom: String, nameTo: String) : this(nameFrom, nameTo, HashCache())
 
-    constructor(nameFrom: String, nameTo: String, hash: Int) : this(nameFrom, nameTo, HashCache(hash))
+    constructor(nameFrom: String, nameTo: String, hash: Long) : this(nameFrom, nameTo, HashCache(hash))
 
-    protected abstract fun hash(): Int
+    protected abstract fun hash(): Long
 
     override fun compareTo(other: MappingEntry): Int {
         var result = nameFrom.compareTo(other.nameFrom)
@@ -148,23 +141,28 @@ sealed class MappingEntry constructor(
         return result
     }
 
-    final override fun hashCode(): Int {
+    final override fun hashCodeLong(): Long {
         if (!hashCache.hashInit) {
             hashCache.hash = hash()
         }
         return hashCache.hash
     }
 
+    final override fun hashCode(): Int {
+        val hash = hashCodeLong()
+        return ((hash ushr 32) xor hash).toInt()
+    }
+
     protected class HashCache {
         constructor()
-        constructor(hash: Int) {
+        constructor(hash: Long) {
             this.hash = hash
             this.hashInit = true
         }
 
         var hashInit = false
             private set
-        var hash = 0
+        var hash = 0L
             set(value) {
                 field = value
                 hashInit = true
@@ -173,7 +171,7 @@ sealed class MappingEntry constructor(
 
     class Field : MappingEntry {
         constructor(nameFrom: String, nameTo: String) : super(nameFrom, nameTo)
-        constructor(nameFrom: String, nameTo: String, hash: Int) : super(nameFrom, nameTo, hash)
+        constructor(nameFrom: String, nameTo: String, hash: Long) : super(nameFrom, nameTo, hash)
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -184,7 +182,7 @@ sealed class MappingEntry constructor(
             return true
         }
 
-        override fun hash(): Int {
+        override fun hash(): Long {
             return hash(nameFrom)
         }
 
@@ -193,8 +191,12 @@ sealed class MappingEntry constructor(
         }
 
         companion object {
-            inline fun hash(nameFrom: String): Int {
-                return nameFrom.hashCode()
+            inline fun hash(nameFrom: String): Long {
+                if (nameFrom.isEmpty()) return 0L
+                var result = nameFrom[0].code
+                result = 31 * result + nameFrom[nameFrom.length - 1].code
+                result = 31 * result + nameFrom.length
+                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
             }
         }
     }
@@ -204,7 +206,7 @@ sealed class MappingEntry constructor(
             this.desc = desc
         }
 
-        constructor(nameFrom: String, desc: String, nameTo: String, hash: Int) : super(nameFrom, nameTo, hash) {
+        constructor(nameFrom: String, desc: String, nameTo: String, hash: Long) : super(nameFrom, nameTo, hash) {
             this.desc = desc
         }
 
@@ -220,7 +222,7 @@ sealed class MappingEntry constructor(
             return true
         }
 
-        override fun hash(): Int {
+        override fun hash(): Long {
             return hash(nameFrom, desc)
         }
 
@@ -236,17 +238,20 @@ sealed class MappingEntry constructor(
         }
 
         companion object {
-            inline fun hash(nameFrom: String, desc: String): Int {
-                var result = nameFrom.hashCode()
-                result = 31 * result + desc.hashCode()
-                return result
+            inline fun hash(nameFrom: String, desc: String): Long {
+                var result = nameFrom[0].code
+                result = 31 * result + nameFrom.length
+                result = 31 * result + nameFrom[nameFrom.length - 1].code
+                result = 31 * result + desc[0].code
+                result = 31 * result + desc.length
+                result = 31 * result + desc[desc.length - 1].code
+                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
             }
         }
     }
 
-    sealed class Class : MappingEntry {
-        constructor(nameFrom: String, nameTo: String) : super(nameFrom, nameTo)
-        constructor(nameFrom: String, nameTo: String, hash: Int) : super(nameFrom, nameTo, hash)
+    sealed class Class(nameFrom: String, nameTo: String, hashCache: HashCache) :
+        MappingEntry(nameFrom, nameTo, hashCache) {
 
         abstract val fieldMapping: FieldMappingEntryMap
         abstract val methodMapping: MethodMappingEntryMap
@@ -254,15 +259,18 @@ sealed class MappingEntry constructor(
         abstract fun toMutable(): MutableClass
 
         companion object {
-            inline fun hash(nameFrom: String): Int {
-                return nameFrom.hashCode()
+            inline fun hash(nameFrom: String): Long {
+                if (nameFrom.isEmpty()) return 0L
+                var result = nameFrom[0].code
+                result = 31 * result + nameFrom[nameFrom.length - 1].code
+                result = 31 * result + nameFrom.length
+                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
             }
         }
     }
 
-    sealed class MutableClass : Class {
-        constructor(nameFrom: String, nameTo: String) : super(nameFrom, nameTo)
-        constructor(nameFrom: String, nameTo: String, hash: Int) : super(nameFrom, nameTo, hash)
+    sealed class MutableClass(nameFrom: String, nameTo: String, hashCache: HashCache) :
+        Class(nameFrom, nameTo, hashCache) {
 
         abstract override val fieldMapping: MutableFieldMappingEntryMap
         abstract override val methodMapping: MutableMethodMappingEntryMap
@@ -274,7 +282,7 @@ sealed class MappingEntry constructor(
             }
 
             @JvmStatic
-            operator fun invoke(nameFrom: String, nameTo: String, hash: Int): MutableClass {
+            operator fun invoke(nameFrom: String, nameTo: String, hash: Long): MutableClass {
                 return MutableClassImpl(nameFrom, nameTo, hash)
             }
         }
@@ -286,25 +294,53 @@ sealed class MappingEntry constructor(
         override val fieldMapping: MutableFieldMappingEntryMap,
         override val methodMapping: MutableMethodMappingEntryMap,
         hashCache: HashCache
-    ) : MutableClass(nameFrom, nameTo, hashCache.hash) {
-        private constructor(nameFrom: String, nameTo: String, hashCache: HashCache) : this(
+    ) : MutableClass(nameFrom, nameTo, hashCache) {
+        constructor(nameFrom: String, nameTo: String, hash: Long) : this(
             nameFrom,
             nameTo,
             MutableMappingEntryMapImpl(),
             MutableMappingEntryMapImpl(),
-            hashCache
+            HashCache(hash)
         )
 
-        constructor(nameFrom: String, nameTo: String) : this(nameFrom, nameTo, HashCache())
-        constructor(nameFrom: String, nameTo: String, hash: Int) : this(nameFrom, nameTo, HashCache(hash))
-
+        constructor(nameFrom: String, nameTo: String) : this(
+            nameFrom,
+            nameTo,
+            MutableMappingEntryMapImpl(),
+            MutableMappingEntryMapImpl(),
+            HashCache()
+        )
 
         override fun toMutable(): MutableClass {
             return MutableClassImpl(nameFrom, nameTo, fieldMapping, methodMapping, hashCache)
         }
 
-        override fun hash(): Int {
+        override fun hash(): Long {
             return hash(nameFrom)
         }
     }
+}
+
+private val objectTypeDecsRegex = "(?<=L)[^;]+(?=;)".toRegex()
+
+fun ClassMapping.reversed(): ClassMapping {
+    val result = MutableClassMapping()
+
+    this.backingMap.forEachFast { c ->
+        val classEntry = MappingEntry.MutableClass(c.nameTo, c.nameFrom)
+        result.add(classEntry)
+
+        c.fieldMapping.backingMap.forEachFast { fieldEntry ->
+            classEntry.fieldMapping.add(MappingEntry.Field(fieldEntry.nameTo, fieldEntry.nameFrom))
+        }
+
+        c.methodMapping.backingMap.forEachFast { methodEntry ->
+            val desc = methodEntry.desc.replace(objectTypeDecsRegex) {
+                this.getNameTo(it.value) ?: it.value
+            }
+            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, desc, methodEntry.nameFrom))
+        }
+    }
+
+    return result.asImmutable()
 }
