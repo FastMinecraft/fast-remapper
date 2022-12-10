@@ -4,11 +4,17 @@ import java.io.Reader
 
 enum class ExternalMappingParser {
     TINY {
-        override fun parse(lines: Sequence<String>): ClassMapping {
+        override fun parse(lines: List<String>): ClassMapping {
             val result: MutableClassMapping = MutableClassMapping()
             var lastClassEntry: MappingEntry.MutableClass? = null
+            var skippedHeader = false
 
-            lines.drop(1).forEach {
+            lines.forEach {
+                if (!skippedHeader) {
+                    skippedHeader = true
+                    return@forEach
+                }
+
                 if (it.isEmpty()) return@forEach
 
                 if (it[0] == 'c') {
@@ -17,8 +23,8 @@ enum class ExternalMappingParser {
                 } else {
                     when (it[1]) {
                         'f' -> {
-                            val split = it.subSequence(5, it.length).split('\t')
-                            lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], split[1]))
+                            val split = it.subSequence(3, it.length).split('\t')
+                            lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[1], split[2]))
                         }
                         'm' -> {
                             val split = it.subSequence(3, it.length).split('\t')
@@ -35,18 +41,23 @@ enum class ExternalMappingParser {
         }
     },
     TSRG2 {
-        override fun parse(lines: Sequence<String>): ClassMapping {
+        override fun parse(lines: List<String>): ClassMapping {
             val result: MutableClassMapping = MutableClassMapping()
             var lastClassEntry: MappingEntry.MutableClass? = null
+            var skippedHeader = !lines[0].startsWith("tsrg2")
 
-            lines.drop(1).forEach {
+            lines.forEach {
+                if (!skippedHeader) {
+                    skippedHeader = true
+                    return@forEach
+                }
                 if (it.isEmpty()) return@forEach
 
-                if (!it.startsWith("\t")) {
+                if (it[0] != '\t') {
                     val split = it.split(' ')
                     lastClassEntry = result.getOrCreate(split[0], split[1])
-                } else {
-                    val split = it.substring(1).split(' ')
+                } else if (it[1] != '\t')  {
+                    val split = it.subSequence(1, it.length).split(' ')
                     if (split.size == 3) {
                         lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))
                     } else {
@@ -57,18 +68,15 @@ enum class ExternalMappingParser {
 
             return result.asImmutable()
         }
-    }
-    ;
+    };
 
     fun parse(string: String): ClassMapping {
         return parse(string.reader())
     }
 
     fun parse(input: Reader): ClassMapping {
-        return input.useLines {
-            parse(it)
-        }
+        return parse(input.readLines())
     }
 
-    abstract fun parse(lines: Sequence<String>): ClassMapping
+    abstract fun parse(lines: List<String>): ClassMapping
 }

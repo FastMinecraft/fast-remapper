@@ -86,7 +86,7 @@ inline fun MutableClassMapping.asImmutable(): ClassMapping {
     return this as ClassMapping
 }
 
-inline fun ClassMapping.get(nameFrom: String): MappingEntry.Class? {
+inline operator fun ClassMapping.get(nameFrom: String): MappingEntry.Class? {
     return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom))
 }
 
@@ -321,7 +321,6 @@ sealed class MappingEntry constructor(
     }
 }
 
-private val objectTypeDecsRegex = "(?<=L)[^;]+(?=;)".toRegex()
 
 fun ClassMapping.reversed(): ClassMapping {
     val result = MutableClassMapping()
@@ -335,10 +334,40 @@ fun ClassMapping.reversed(): ClassMapping {
         }
 
         c.methodMapping.backingMap.forEachFast { methodEntry ->
-            val desc = methodEntry.desc.replace(objectTypeDecsRegex) {
-                this.getNameTo(it.value) ?: it.value
-            }
-            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, desc, methodEntry.nameFrom))
+            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, this.remapDesc(methodEntry.desc), methodEntry.nameFrom))
+        }
+    }
+
+    return result.asImmutable()
+}
+
+private val objectTypeDecsRegex = "(?<=L)[^;]+(?=;)".toRegex()
+
+fun ClassMapping.remapDesc(desc: String): String {
+    return desc.replace(objectTypeDecsRegex) {
+        this.getNameTo(it.value) ?: it.value
+    }
+}
+
+fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
+    val result = MutableClassMapping()
+
+    this.backingMap.forEachFast { c ->
+        val classEntry = MappingEntry.MutableClass(c.nameFrom, other.getNameTo(c.nameTo)!!)
+        result.add(classEntry)
+
+        c.fieldMapping.backingMap.forEachFast { fieldEntry ->
+            classEntry.fieldMapping.add(MappingEntry.Field(fieldEntry.nameFrom, other.getNameTo(fieldEntry.nameTo)!!))
+        }
+
+        c.methodMapping.backingMap.forEachFast { methodEntry ->
+            classEntry.methodMapping.add(
+                MappingEntry.Method(
+                    methodEntry.nameFrom,
+                    this.remapDesc(methodEntry.desc),
+                    other.getNameTo(methodEntry.nameTo)!!
+                )
+            )
         }
     }
 
