@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
-    application
 }
 
 group = "dev.fastmc"
@@ -44,6 +43,7 @@ tasks {
 
     withType<KotlinCompile> {
         kotlinOptions {
+            jvmTarget = "17"
             freeCompilerArgs = listOf(
                 "-opt-in=kotlin.RequiresOptIn",
                 "-opt-in=kotlin.contracts.ExperimentalContracts",
