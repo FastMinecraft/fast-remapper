@@ -1,23 +1,31 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    kotlin("jvm") version "1.7.21"
+    kotlin("jvm")
     application
 }
 
-group = "dev.luna5ama"
-version = "1.0.0"
+group = "dev.fastmc"
+version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation(kotlin("test"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.3")
+    implementation(kotlin("stdlib-jdk8"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
-    implementation("it.unimi.dsi:fastutil:8.5.9")
+    implementation("it.unimi.dsi:fastutil:8.5.11")
 
     implementation("org.ow2.asm:asm-commons:9.4")
     implementation("org.ow2.asm:asm-tree:9.4")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
 }
 
 kotlin {
@@ -29,22 +37,20 @@ kotlin {
     kotlinDaemonJvmArgs = jvmArgs.toList()
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
-
 tasks {
-    compileJava {
+    withType<JavaCompile> {
         options.encoding = "UTF-8"
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
     }
 
-    compileKotlin {
-        kotlinOptions.jvmTarget = "17"
+    withType<KotlinCompile> {
+        kotlinOptions {
+            freeCompilerArgs = listOf(
+                "-opt-in=kotlin.RequiresOptIn",
+                "-opt-in=kotlin.contracts.ExperimentalContracts",
+                "-Xlambdas=indy",
+                "-Xjvm-default=all",
+                "-Xbackend-threads=0"
+            )
+        }
     }
-}
-
-application {
-    mainClass.set("MainKt")
 }

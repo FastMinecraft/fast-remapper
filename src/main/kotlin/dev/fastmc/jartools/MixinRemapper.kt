@@ -1,6 +1,5 @@
 package dev.fastmc.jartools
 
-import dev.fastmc.jartools.mapping.AsmRemapper
 import dev.fastmc.jartools.mapping.ClassMapping
 import dev.fastmc.jartools.util.annotations
 import dev.fastmc.jartools.util.containsAnnotation
