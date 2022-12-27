@@ -55,13 +55,19 @@ enum class ExternalMappingParser {
 
                 if (it[0] != '\t') {
                     val split = it.split(' ')
+                    val prevSize = result.size
                     lastClassEntry = result.getOrCreate(split[0], split[1])
+                    assert(result.size == prevSize + 1)
                 } else if (it[1] != '\t') {
                     val split = it.subSequence(1, it.length).split(' ')
                     if (split.size == 3) {
+                        val prevSize = lastClassEntry!!.methodMapping.size
                         lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))
+                        assert(lastClassEntry!!.methodMapping.size == prevSize + 1)
                     } else {
+                        val prevSize = lastClassEntry!!.fieldMapping.size
                         lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], split[1]))
+                        assert(lastClassEntry!!.fieldMapping.size == prevSize + 1)
                     }
                 }
             }

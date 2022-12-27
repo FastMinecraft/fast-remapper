@@ -193,7 +193,7 @@ sealed class MappingEntry constructor(
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code
+                var result = nameFrom[0].code shl 8
                 result = 31 * result + nameFrom[nameFrom.length - 1].code
                 result = 31 * result + nameFrom.length
                 return (result.toLong() shl 32) + nameFrom.hashCode().toLong()
@@ -239,14 +239,14 @@ sealed class MappingEntry constructor(
 
         companion object {
             inline fun hash(nameFrom: String, desc: String): Long {
-                var a = nameFrom[0].code
+                var a = nameFrom[0].code shl 8
                 a = 31 * a + nameFrom.length
                 a = 31 * a + nameFrom[nameFrom.length - 1].code
-                a = 31 * a + desc[0].code
-                a = 31 * a + desc.length
-                a = 31 * a + desc[desc.length - 1].code
-                val b = 31L * nameFrom.hashCode().toLong() + desc.hashCode().toLong()
-                return (a.toLong() shl 32) or b
+                var b = desc[0].code shl 8
+                b = 31 * b + desc.length
+                b = 31 * b + desc[desc.length - 1].code
+                val c = 0x111L * nameFrom.hashCode().toLong() + desc.hashCode().toLong()
+                return (a.toLong() * 0x10101 + b.toLong()) * 0x10101 + c
             }
         }
     }
@@ -262,7 +262,7 @@ sealed class MappingEntry constructor(
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code
+                var result = nameFrom[0].code shl 8
                 result = 31 * result + nameFrom[nameFrom.length - 1].code
                 result = 31 * result + nameFrom.length
                 return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
