@@ -1,6 +1,6 @@
-package dev.fastmc.jartools.pipeline
+package dev.fastmc.remapper.pipeline
 
-import dev.fastmc.jartools.util.JarUtils
+import dev.fastmc.remapper.util.JarUtils
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*

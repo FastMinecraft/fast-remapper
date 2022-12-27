@@ -1,4 +1,4 @@
-package dev.fastmc.jartools
+package dev.fastmc.remapper
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project

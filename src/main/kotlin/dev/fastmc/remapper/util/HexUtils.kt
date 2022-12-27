@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.util
+package dev.fastmc.remapper.util
 
 private val hexChars = "0123456789ABCDEF".toCharArray()
 

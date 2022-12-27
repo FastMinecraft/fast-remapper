@@ -1,11 +1,11 @@
-package dev.fastmc.jartools.pipeline
+package dev.fastmc.remapper.pipeline
 
 import dev.fastmc.asmkt.visit
-import dev.fastmc.jartools.mapping.*
-import dev.fastmc.jartools.util.annotations
-import dev.fastmc.jartools.util.findAnnotation
-import dev.fastmc.jartools.util.findAnyAnnotation
-import dev.fastmc.jartools.util.findMixinAnnotation
+import dev.fastmc.remapper.mapping.*
+import dev.fastmc.remapper.util.annotations
+import dev.fastmc.remapper.util.findAnnotation
+import dev.fastmc.remapper.util.findAnyAnnotation
+import dev.fastmc.remapper.util.findMixinAnnotation
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import kotlinx.coroutines.coroutineScope

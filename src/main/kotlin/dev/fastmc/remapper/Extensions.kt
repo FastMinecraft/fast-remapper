@@ -1,7 +1,7 @@
-package dev.fastmc.jartools
+package dev.fastmc.remapper
 
-import dev.fastmc.jartools.mapping.MappingName
-import dev.fastmc.jartools.util.McVersion
+import dev.fastmc.remapper.mapping.MappingName
+import dev.fastmc.remapper.util.McVersion
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property

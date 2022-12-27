@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.pipeline
+package dev.fastmc.remapper.pipeline
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import kotlinx.coroutines.channels.Channel

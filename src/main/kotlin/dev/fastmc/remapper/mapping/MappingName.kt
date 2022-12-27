@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 sealed class MappingName(val type: MappingType) {
     abstract val identifier: String

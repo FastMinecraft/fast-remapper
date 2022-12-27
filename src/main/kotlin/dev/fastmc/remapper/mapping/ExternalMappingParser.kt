@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 import java.io.Reader
 

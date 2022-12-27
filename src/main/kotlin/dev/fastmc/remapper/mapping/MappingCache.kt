@@ -1,6 +1,6 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
-import dev.fastmc.jartools.util.MD5Hash
+import dev.fastmc.remapper.util.MD5Hash
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import java.io.File
 import java.nio.file.Files

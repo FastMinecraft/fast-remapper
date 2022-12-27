@@ -1,8 +1,8 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
-import dev.fastmc.jartools.Shared
-import dev.fastmc.jartools.util.GlobalMavenCache
-import dev.fastmc.jartools.util.McVersion
+import dev.fastmc.remapper.Shared
+import dev.fastmc.remapper.util.GlobalMavenCache
+import dev.fastmc.remapper.util.McVersion
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

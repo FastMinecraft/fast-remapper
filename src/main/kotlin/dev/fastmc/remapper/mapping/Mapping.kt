@@ -1,6 +1,6 @@
 @file:Suppress("NOTHING_TO_INLINE", "DuplicatedCode", "unused")
 
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 import it.unimi.dsi.fastutil.objects.*
 

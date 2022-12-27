@@ -1,6 +1,6 @@
-package dev.fastmc.jartools.util
+package dev.fastmc.remapper.util
 
-import dev.fastmc.jartools.Shared
+import dev.fastmc.remapper.Shared
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.FileNotFoundException

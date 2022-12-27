@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 enum class MappingType(val identifier: String) {
     OBFUSCATED("obfuscated"),

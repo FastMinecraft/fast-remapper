@@ -1,8 +1,8 @@
-package dev.fastmc.jartools
+package dev.fastmc.remapper
 
-import dev.fastmc.jartools.mapping.*
-import dev.fastmc.jartools.pipeline.*
-import dev.fastmc.jartools.util.JarUtils
+import dev.fastmc.remapper.mapping.*
+import dev.fastmc.remapper.pipeline.*
+import dev.fastmc.remapper.util.JarUtils
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.filter

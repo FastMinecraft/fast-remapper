@@ -1,7 +1,7 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
-import dev.fastmc.jartools.util.appendHexLong
-import dev.fastmc.jartools.util.toHexLong
+import dev.fastmc.remapper.util.appendHexLong
+import dev.fastmc.remapper.util.toHexLong
 import java.io.Reader
 
 @Suppress("unused", "MemberVisibilityCanBePrivate")

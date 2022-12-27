@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.util
+package dev.fastmc.remapper.util
 
 @JvmInline
 value class McVersion private constructor(private val packed: Int) : Comparable<McVersion> {

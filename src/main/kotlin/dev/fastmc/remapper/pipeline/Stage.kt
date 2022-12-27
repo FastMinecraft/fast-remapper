@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.pipeline
+package dev.fastmc.remapper.pipeline
 
 interface Stage {
     suspend fun run(files: Map<String, JarEntry>): Map<String, JarEntry>

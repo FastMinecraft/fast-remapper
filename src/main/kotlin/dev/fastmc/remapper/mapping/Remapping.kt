@@ -1,9 +1,9 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
-import dev.fastmc.jartools.pipeline.ClassEntry
-import dev.fastmc.jartools.util.annotations
-import dev.fastmc.jartools.util.containsAnnotation
-import dev.fastmc.jartools.util.findMixinAnnotation
+import dev.fastmc.remapper.pipeline.ClassEntry
+import dev.fastmc.remapper.util.annotations
+import dev.fastmc.remapper.util.containsAnnotation
+import dev.fastmc.remapper.util.findMixinAnnotation
 import org.objectweb.asm.commons.Remapper
 
 open class AsmRemapper(private val classMapping: ClassMapping) : Remapper() {
