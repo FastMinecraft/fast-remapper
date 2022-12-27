@@ -1,5 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+group = "dev.fastmc"
+version = "1.0-SNAPSHOT"
+
 plugins {
     kotlin("jvm")
     `java-gradle-plugin`
@@ -7,8 +10,16 @@ plugins {
     id("dev.fastmc.maven-repo").version("1.0.0")
 }
 
-group = "dev.fastmc"
-version = "1.0-SNAPSHOT"
+gradlePlugin {
+    plugins {
+        create("fast-remapper") {
+            id = "dev.fastmc.fast-remapper"
+            displayName = "fast-remapper"
+            description = "Remap tools for Minecraft mods"
+            implementationClass = "dev.fastmc.remapper.FastRemapperPlugin"
+        }
+    }
+}
 
 repositories {
     mavenCentral()
