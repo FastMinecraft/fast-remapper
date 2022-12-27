@@ -2,6 +2,9 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
+    `java-gradle-plugin`
+    `maven-publish`
+    id("dev.fastmc.maven-repo").version("1.0.0")
 }
 
 group = "dev.fastmc"

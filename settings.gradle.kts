@@ -3,7 +3,7 @@ rootProject.name = "fast-remapper"
 pluginManagement {
     repositories {
         gradlePluginPortal()
-        maven("https://raw.githubusercontent.com/Luna5ama/JarOptimizer/maven-repo")
+        maven("https://maven.fastmc.dev/")
     }
 
     val kotlinVersion: String by settings
