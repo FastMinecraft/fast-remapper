@@ -13,8 +13,9 @@ class FastRemapperPlugin : Plugin<Project> {
         }
 
         project.afterEvaluate {
-            extension.jarTasks.forEach {
-                project.tasks.register("fastRemap${it.name.capitalized()}", RemapJarTask::class.java, it)
+            extension.jarTaskNames.forEach {
+                val task = project.tasks.getByName(it)
+                project.tasks.register("fastRemap${task.name.capitalized()}", RemapJarTask::class.java, task)
             }
         }
     }
