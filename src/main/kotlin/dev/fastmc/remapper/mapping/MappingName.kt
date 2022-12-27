@@ -33,6 +33,7 @@ sealed class MappingName(val type: MappingType) {
     }
 
     class Mcp(val channel: String, val version: Int) : MappingName(MappingType.MCP) {
+        constructor(channel: String, version: String) : this(channel, version.toInt())
         override val identifier: String
             get() = "mcp.$channel.$version"
     }
