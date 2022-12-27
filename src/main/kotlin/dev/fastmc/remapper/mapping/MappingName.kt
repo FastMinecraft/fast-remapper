@@ -1,10 +1,30 @@
 package dev.fastmc.remapper.mapping
 
-sealed class MappingName(val type: MappingType) {
+sealed class MappingName(val type: MappingType) : Comparable<MappingName> {
     abstract val identifier: String
 
     final override fun toString(): String {
         return identifier
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MappingName) return false
+
+        if (type != other.type) return false
+        if (identifier != other.identifier) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = type.hashCode()
+        result = 31 * result + identifier.hashCode()
+        return result
+    }
+
+    override fun compareTo(other: MappingName): Int {
+        return identifier.compareTo(other.identifier)
     }
 
     object Obfuscated : MappingName(MappingType.OBFUSCATED) {
