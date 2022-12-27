@@ -5,7 +5,7 @@ import org.gradle.api.Project
 import org.gradle.configurationcache.extensions.capitalized
 import java.io.File
 
-class FastRemapper : Plugin<Project> {
+class FastRemapperPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         Shared.globalCacheDir = File(project.gradle.gradleUserHomeDir, "caches/jar-tools").also { it.mkdirs() }
         val extension = project.extensions.create("jarTools", FastRemapperExtension::class.java).apply {
