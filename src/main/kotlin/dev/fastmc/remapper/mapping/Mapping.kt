@@ -17,6 +17,14 @@ sealed interface MutableMappingEntryMap<T : MappingEntry> : MappingEntryMap<T> {
     fun addAll(entries: MappingEntryMap<in T>)
 }
 
+fun String.hashCodeLong(): Long {
+    var result = 0L
+    for (i in this.indices) {
+        result = 0x155L * result + this[i].code.toLong()
+    }
+    return result
+}
+
 class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
     MutableMappingEntryMap<T> {
     override val backingMap = BackingMap<T>()
@@ -193,10 +201,10 @@ sealed class MappingEntry constructor(
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code shl 8
-                result = 31 * result + nameFrom[nameFrom.length - 1].code
-                result = 31 * result + nameFrom.length
-                return (result.toLong() shl 32) + nameFrom.hashCode().toLong()
+                var result = nameFrom[0].code.toLong()
+                result = 31L * result + nameFrom[nameFrom.length - 1].code
+                result = 31L * result + nameFrom.length
+                return (result) * 10101L + nameFrom.hashCodeLong()
             }
         }
     }
@@ -239,14 +247,14 @@ sealed class MappingEntry constructor(
 
         companion object {
             inline fun hash(nameFrom: String, desc: String): Long {
-                var a = nameFrom[0].code shl 8
-                a = 31 * a + nameFrom.length
-                a = 31 * a + nameFrom[nameFrom.length - 1].code
-                var b = desc[0].code shl 8
-                b = 31 * b + desc.length
-                b = 31 * b + desc[desc.length - 1].code
-                val c = 0x111L * nameFrom.hashCode().toLong() + desc.hashCode().toLong()
-                return (a.toLong() * 0x10101 + b.toLong()) * 0x10101 + c
+                var a = nameFrom[0].code.toLong()
+                a = 31L * a + nameFrom.length
+                a = 31L * a + nameFrom[nameFrom.length - 1].code
+                var b = desc[0].code.toLong()
+                b = 31L * b + desc.length
+                b =  31L * b + desc[desc.length - 1].code
+                val c = 31L * nameFrom.hashCodeLong() + desc.hashCodeLong()
+                return (a * 0x10101 + b) * 0x10101 + c
             }
         }
     }
@@ -262,10 +270,10 @@ sealed class MappingEntry constructor(
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code shl 8
-                result = 31 * result + nameFrom[nameFrom.length - 1].code
-                result = 31 * result + nameFrom.length
-                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
+                var result = nameFrom[0].code.toLong()
+                result = 31L * result + nameFrom[nameFrom.length - 1].code
+                result = 31L * result + nameFrom.length
+                return result * 0x10101 + nameFrom.hashCodeLong()
             }
         }
     }
@@ -354,14 +362,14 @@ fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
     val result = MutableClassMapping()
 
     this.backingMap.forEachFast { c ->
-        val otherClassEntry = other.get(c.nameTo)!!
-        val classEntry = MappingEntry.MutableClass(c.nameFrom, other.getNameTo(c.nameTo)!!)
+        val otherClassEntry = other.get(c.nameTo)
+        val classEntry = MappingEntry.MutableClass(c.nameFrom, otherClassEntry?.nameTo ?: c.nameFrom)
         result.add(classEntry)
 
         c.fieldMapping.backingMap.forEachFast { fieldEntry ->
             classEntry.fieldMapping.add(MappingEntry.Field(
                 fieldEntry.nameFrom,
-                otherClassEntry.fieldMapping.getNameTo(fieldEntry.nameTo)!!
+                otherClassEntry?.fieldMapping?.getNameTo(fieldEntry.nameTo) ?: fieldEntry.nameFrom
             ))
         }
 
@@ -371,7 +379,7 @@ fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
                 MappingEntry.Method(
                     methodEntry.nameFrom,
                     desc,
-                    otherClassEntry.methodMapping.getNameTo(methodEntry.nameTo, desc)!!
+                    otherClassEntry?.methodMapping?.getNameTo(methodEntry.nameTo, desc) ?: methodEntry.nameFrom
                 )
             )
         }
