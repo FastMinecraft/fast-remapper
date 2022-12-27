@@ -6,10 +6,12 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
 import org.gradle.jvm.tasks.Jar
 import java.io.File
 import javax.inject.Inject
 
+@Suppress("LeakingThis")
 abstract class FastRemapperExtension {
     @get:Inject
     abstract val project: Project
@@ -27,6 +29,7 @@ abstract class FastRemapperExtension {
 
     val mixinConfigs: List<String> get() = mixinConfigs0
     val jarTaskNames: List<String> get() = jarTaskNames0
+    val minecraftJarZipTree = project.zipTree(minecraftJar)
 
     fun mcVersion(version: String) {
         mcVersion = McVersion(version)
@@ -66,6 +69,14 @@ abstract class FastRemapperExtension {
 
     fun remap(vararg jarTasks: Jar) {
         this.jarTaskNames0.addAll(jarTasks.map { it.name })
+    }
+
+    fun remap(jarTask: Provider<out Jar>) {
+        jarTaskNames0.add(jarTask.get().name)
+    }
+
+    fun remap(vararg jarTasks: Provider<out Jar>) {
+        this.jarTaskNames0.addAll(jarTasks.map { it.get().name })
     }
 
     enum class ProjectType {

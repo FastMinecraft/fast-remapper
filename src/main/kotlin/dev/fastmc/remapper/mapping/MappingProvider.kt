@@ -73,7 +73,7 @@ sealed interface MappingProvider<T : MappingName> {
                     val entry = it.getEntry("config/joined.tsrg")
                     it.getInputStream(entry).readAllBytes().toString(Charsets.UTF_8)
                 }
-                ExternalMappingParser.TSRG2.parse(string)
+                ExternalMappingParser.TSRG.parse(string)
             }
         }
 

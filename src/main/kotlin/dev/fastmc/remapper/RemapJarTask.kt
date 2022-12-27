@@ -3,22 +3,23 @@ package dev.fastmc.remapper
 import dev.fastmc.remapper.mapping.*
 import dev.fastmc.remapper.pipeline.*
 import dev.fastmc.remapper.util.JarUtils
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.toList
-import org.gradle.api.file.RegularFile
-import org.gradle.api.provider.Provider
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.bundling.AbstractArchiveTask
+import org.gradle.api.internal.file.copy.CopyAction
+import org.gradle.api.internal.file.copy.CopyActionProcessingStream
+import org.gradle.api.tasks.WorkResult
+import org.gradle.api.tasks.WorkResults
 import org.gradle.jvm.tasks.Jar
+import org.objectweb.asm.ClassReader
 import org.objectweb.asm.commons.Remapper
+import java.io.File
 import javax.inject.Inject
 
-abstract class RemapJarTask @Inject constructor(private val jarTask: Jar) : AbstractArchiveTask() {
-
+@Suppress("LeakingThis")
+abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
     private val extension = project.extensions.getByType(FastRemapperExtension::class.java)
 
     init {
@@ -28,29 +29,64 @@ abstract class RemapJarTask @Inject constructor(private val jarTask: Jar) : Abst
         archiveVersion.set(jarTask.archiveVersion)
         archiveClassifier.set("remapped")
         archiveExtension.set("jar")
+
+        val jarZipTree = project.provider {
+            project.zipTree(jarTask.archiveFile)
+        }
+
+        from(jarZipTree)
+
+        manifest.from(jarZipTree.map { zipTree -> zipTree.find { it.name == "MANIFEST.MF" }!! })
+        manifest.attributes(
+            mapOf(
+                "MixinConfigs" to extension.mixinConfigs.joinToString(", "),
+            )
+        )
     }
 
-    @get:InputFile
-    val inputJar: Provider<RegularFile>
-        get() = jarTask.archiveFile
+    override fun createCopyAction(): CopyAction {
+        return RemapJarAction(extension, archiveFile.get().asFile)
+    }
 
-    @TaskAction
-    fun runTask() {
-        runBlocking {
-            withContext(Dispatchers.Default) {
-                val inputFile = inputJar.get().asFile
-                val outputFile = archiveFile.get().asFile
+    class RemapJarAction(private val extension: FastRemapperExtension, private val outputFile: File) : CopyAction {
+        private fun CoroutineScope.getMapping(projectMapping: MappingName): MappingPipeline {
+            val minecraftClassFiles = ObjectArrayList<Pair<String, File>>()
+            extension.minecraftJarZipTree.visit {
+                if (it.isDirectory) return@visit
+                if (!it.name.endsWith(".class")) return@visit
+                minecraftClassFiles.add(it.relativePath.pathString to it.file)
+            }
+            val minecraftClasses = async(Dispatchers.IO) {
+                minecraftClassFiles.map { (path, file) ->
+                    ClassEntry(path, file.readBytes(), ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+                }
+            }
+            return SequenceMappingPipeline(
+                MappingProviderPipeline(getBaseMapping(projectMapping)),
+                MixinMappingPipeline(),
+                SubclassMappingPipeline(minecraftClasses)
+            )
+        }
 
+        override fun execute(stream: CopyActionProcessingStream): WorkResult {
+            runBlocking {
                 val tasks = ObjectArrayList<Stage>()
                 val projectMapping = extension.mapping.get()
                 val mapping = getMapping(projectMapping)
-                val refmapBaseName = archiveFileName.get().removeSuffix(".${archiveExtension.get()}")
+                val refmapBaseName = outputFile.name.removeSuffix(".jar")
                 when (extension.type) {
                     FastRemapperExtension.ProjectType.FORGE -> {
                         tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "searge", extension.mixinConfigs))
                     }
                     FastRemapperExtension.ProjectType.FABRIC -> {
-                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "named:intermediary", extension.mixinConfigs))
+                        tasks.add(
+                            GenerateRefmapStage(
+                                mapping,
+                                refmapBaseName,
+                                "named:intermediary",
+                                extension.mixinConfigs
+                            )
+                        )
                     }
                 }
                 tasks.add(object : RemapStage() {
@@ -58,98 +94,112 @@ abstract class RemapJarTask @Inject constructor(private val jarTask: Jar) : Abst
                         return MixinRemapper(mapping.get(classEntries), classEntries)
                     }
                 })
-                JarTaskExecutor(inputFile, outputFile).execute(SequenceStage(tasks))
-            }
-        }
-    }
 
-    private fun CoroutineScope.getMapping(projectMapping: MappingName): MappingPipeline {
-        val minecraftClasses = async(Dispatchers.IO) {
-            JarUtils.unpackFlow(extension.minecraftJar.get().asFile)
-                .filter { it.second != null }
-                .filter { it.first.endsWith(".class") }
-                .map { ClassEntry(it.first, it.second!!) }
-                .toList()
-        }
-        return SequenceMappingPipeline(
-            MappingProviderPipeline(getBaseMapping(projectMapping)),
-            MixinMappingPipeline(),
-            SubclassMappingPipeline(minecraftClasses)
-        )
-    }
+                withContext(Dispatchers.Default) {
+                    val cachedFileFlow = JarUtils.unpackFlow(CoroutineScope(coroutineContext + Dispatchers.IO), stream)
 
-    private fun CoroutineScope.getBaseMapping(projectMapping: MappingName): Deferred<ClassMapping> {
-        return async {
-            when (extension.type) {
-                FastRemapperExtension.ProjectType.FORGE -> {
-                    when (projectMapping) {
-                        is MappingName.Mcp -> {
-                            MappingProvider.getOrCompute(
-                                extension.mcVersion,
-                                projectMapping,
-                                MappingName.Searge
-                            ) {
-                                MappingProvider.Searge2Mcp.provide(
-                                    extension.mcVersion,
-                                    projectMapping
-                                ).reversed()
+                    val jarEntryFlow = cachedFileFlow.map {
+                        when {
+                            it.second == null -> JarEntry(it.first)
+                            it.first.endsWith(".class") -> ClassEntry(it.first, it.second!!)
+                            else -> JarFileEntry(it.first, it.second!!)
+                        }
+                    }
+
+                    val files = Object2ObjectOpenHashMap<String, JarEntry>()
+                    jarEntryFlow.collect {
+                        files[it.fileName] = it
+                    }
+                    val result = SequenceStage(tasks).run(files)
+
+                    withContext(Dispatchers.IO) {
+                        val output = flow {
+                            result.values.forEach {
+                                emit(it.fileName to (it as? JarFileEntry)?.bytes)
                             }
                         }
-                        is MappingName.Yarn -> {
-                            MappingProvider.getOrCompute(
-                                extension.mcVersion,
-                                projectMapping,
-                                MappingName.Searge
-                            ) {
-                                MappingProvider.YarnIntermediary2Yarn.provide(
+                        JarUtils.repackFlow(output, outputFile)
+                    }
+                }
+            }
+
+            return WorkResults.didWork(true)
+        }
+
+        private fun CoroutineScope.getBaseMapping(projectMapping: MappingName): Deferred<ClassMapping> {
+            return async {
+                when (extension.type) {
+                    FastRemapperExtension.ProjectType.FORGE -> {
+                        when (projectMapping) {
+                            is MappingName.Mcp -> {
+                                MappingProvider.getOrCompute(
                                     extension.mcVersion,
-                                    projectMapping
-                                ).reversed().mapWith(
-                                    MappingProvider.Obf2YarnIntermediary.provide(
-                                        extension.mcVersion
+                                    projectMapping,
+                                    MappingName.Searge
+                                ) {
+                                    MappingProvider.Searge2Mcp.provide(
+                                        extension.mcVersion,
+                                        projectMapping
                                     ).reversed()
-                                ).mapWith(
-                                    MappingProvider.Obf2Searge.provide(extension.mcVersion)
-                                )
+                                }
                             }
+                            is MappingName.Yarn -> {
+                                MappingProvider.getOrCompute(
+                                    extension.mcVersion,
+                                    projectMapping,
+                                    MappingName.Searge
+                                ) {
+                                    MappingProvider.YarnIntermediary2Yarn.provide(
+                                        extension.mcVersion,
+                                        projectMapping
+                                    ).reversed().mapWith(
+                                        MappingProvider.Obf2YarnIntermediary.provide(
+                                            extension.mcVersion
+                                        ).reversed()
+                                    ).mapWith(
+                                        MappingProvider.Obf2Searge.provide(extension.mcVersion)
+                                    )
+                                }
+                            }
+                            else -> throw IllegalArgumentException("Unsupported mapping for forge project: $projectMapping")
                         }
-                        else -> throw IllegalArgumentException("Unsupported mapping for forge project: $projectMapping")
                     }
-                }
-                FastRemapperExtension.ProjectType.FABRIC -> {
-                    when (projectMapping) {
-                        is MappingName.Yarn -> {
-                            MappingProvider.getOrCompute(
-                                extension.mcVersion,
-                                projectMapping,
-                                MappingName.YarnIntermediary
-                            ) {
-                                MappingProvider.YarnIntermediary2Yarn.provide(
+                    FastRemapperExtension.ProjectType.FABRIC -> {
+                        when (projectMapping) {
+                            is MappingName.Yarn -> {
+                                MappingProvider.getOrCompute(
                                     extension.mcVersion,
-                                    projectMapping
-                                ).reversed()
+                                    projectMapping,
+                                    MappingName.YarnIntermediary
+                                ) {
+                                    MappingProvider.YarnIntermediary2Yarn.provide(
+                                        extension.mcVersion,
+                                        projectMapping
+                                    ).reversed()
+                                }
                             }
-                        }
-                        is MappingName.Mcp -> {
-                            MappingProvider.getOrCompute(
-                                extension.mcVersion,
-                                projectMapping,
-                                MappingName.YarnIntermediary
-                            ) {
-                                MappingProvider.Searge2Mcp.provide(
+                            is MappingName.Mcp -> {
+                                MappingProvider.getOrCompute(
                                     extension.mcVersion,
-                                    projectMapping
-                                ).reversed().mapWith(
-                                    MappingProvider.Obf2Searge.provide(extension.mcVersion).reversed()
-                                ).mapWith(
-                                    MappingProvider.Obf2YarnIntermediary.provide(extension.mcVersion)
-                                )
+                                    projectMapping,
+                                    MappingName.YarnIntermediary
+                                ) {
+                                    MappingProvider.Searge2Mcp.provide(
+                                        extension.mcVersion,
+                                        projectMapping
+                                    ).reversed().mapWith(
+                                        MappingProvider.Obf2Searge.provide(extension.mcVersion).reversed()
+                                    ).mapWith(
+                                        MappingProvider.Obf2YarnIntermediary.provide(extension.mcVersion)
+                                    )
+                                }
                             }
+                            else -> throw IllegalArgumentException("Unsupported mapping for fabric project: $projectMapping")
                         }
-                        else -> throw IllegalArgumentException("Unsupported mapping for fabric project: $projectMapping")
                     }
                 }
             }
         }
+
     }
 }

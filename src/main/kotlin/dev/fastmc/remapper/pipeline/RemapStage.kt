@@ -17,18 +17,23 @@ abstract class RemapStage : Stage {
             val classEntries = result.filterValueType<ClassEntry>()
             val remapper = remapper(classEntries.values)
 
-            val channel = Channel<JarEntry>(Runtime.getRuntime().availableProcessors())
-            classEntries.values.forEach {
-                launch {
-                    val newNode = ClassNode()
-                    val classRemapper = ClassRemapper(newNode, remapper)
-                    it.classNode.accept(classRemapper)
-                    channel.send(it.update(newNode))
+            val channel = Channel<JarEntry>(Channel.BUFFERED)
+            launch {
+                for (e in channel) {
+                    result.put(e)
                 }
             }
-            for (e in channel) {
-                result.put(e)
+            coroutineScope {
+                classEntries.values.forEach {
+                    launch {
+                        val newNode = ClassNode()
+                        val classRemapper = ClassRemapper(newNode, remapper)
+                        it.classNode.accept(classRemapper)
+                        channel.send(it.update(newNode))
+                    }
+                }
             }
+            channel.close()
 
             result
         }

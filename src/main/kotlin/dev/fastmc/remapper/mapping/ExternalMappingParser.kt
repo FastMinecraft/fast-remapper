@@ -40,7 +40,7 @@ enum class ExternalMappingParser {
             return result.asImmutable()
         }
     },
-    TSRG2 {
+    TSRG {
         override fun parse(lines: List<String>): ClassMapping {
             val result: MutableClassMapping = MutableClassMapping()
             var lastClassEntry: MappingEntry.MutableClass? = null
@@ -56,7 +56,7 @@ enum class ExternalMappingParser {
                 if (it[0] != '\t') {
                     val split = it.split(' ')
                     lastClassEntry = result.getOrCreate(split[0], split[1])
-                } else if (it[1] != '\t')  {
+                } else if (it[1] != '\t') {
                     val split = it.subSequence(1, it.length).split(' ')
                     if (split.size == 3) {
                         lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))

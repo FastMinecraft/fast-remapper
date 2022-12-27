@@ -1,10 +1,6 @@
 package dev.fastmc.remapper.pipeline
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
-import com.google.gson.JsonParser
-import com.google.gson.stream.JsonWriter
+import com.google.gson.*
 import dev.fastmc.asmkt.visit
 import dev.fastmc.remapper.mapping.*
 import dev.fastmc.remapper.util.annotations
@@ -16,8 +12,8 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import org.objectweb.asm.Type
-import org.objectweb.asm.tree.AnnotationNode
 import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.MethodNode
 import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 
@@ -33,60 +29,73 @@ class GenerateRefmapStage(
             val classEntries = files.values.filterIsInstance<ClassEntry>()
             val mixinReferMap = Object2ObjectOpenHashMap<String, Object2ObjectOpenHashMap<String, String>>()
             val mapping = mappingPipeline.get(classEntries)
-            val gson = GsonBuilder().setPrettyPrinting().create()
+            val gson = GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
 
             launch {
-                classEntries.forEach { classEntry ->
-                    val classNode = classEntry.classNode
-                    val mixinAnnotation = classNode.findMixinAnnotation() ?: return@forEach
+                coroutineScope {
+                    classEntries.forEach { classEntry ->
+                        val classNode = classEntry.classNode
+                        val mixinAnnotation = classNode.findMixinAnnotation() ?: return@forEach
 
-                    val classRefmap = Object2ObjectOpenHashMap<String, String>()
-                    require(mixinReferMap.put(classNode.name, classRefmap) == null) {
-                        "Duplicate mixin class ${classNode.name}"
+                        val classRefmap = Object2ObjectOpenHashMap<String, String>()
+                        require(mixinReferMap.put(classNode.name, classRefmap) == null) {
+                            "Duplicate mixin class ${classNode.name}"
+                        }
+
+                        var remapping = true
+                        val valueList = ObjectArrayList<Type>()
+                        val targetList = ObjectArrayList<String>()
+                        mixinAnnotation.visit {
+                            visitValue<Boolean>("remap") {
+                                remapping = it
+                            }
+                            visitArray("value") {
+                                valueList.addAll(it)
+                            }
+                            visitArray("targets") {
+                                targetList.addAll(it)
+                            }
+                        }
+                        if (!remapping) return@forEach
+
+                        val targetClassList = ObjectArrayList<String>(valueList.size + targetList.size)
+                        valueList.mapTo(targetClassList, Type::getInternalName)
+                        targetClassList.addAll(targetList)
+
+                        launch {
+                            targetClassList.forEach {
+                                val classMappingEntry = mapping[it]
+                                    ?: throw IllegalStateException("Cannot find mapping for target class $it at ${classNode.name}")
+
+                                mapMethods(classMappingEntry, it, classNode, mapping, classRefmap)
+                                mapAccessors(mapping, classNode, classMappingEntry, classRefmap)
+                            }
+                        }
+
+                        remapMixinTarget(mapping, classEntry, valueList, targetList, result)
                     }
-
-                    var remapping = true
-                    val valueList = ObjectArrayList<Type>()
-                    val targetList = ObjectArrayList<String>()
-                    mixinAnnotation.visit {
-                        visitValue<Boolean>("remap") {
-                            remapping = it
-                        }
-                        visitArray("value") {
-                            valueList.addAll(it)
-                        }
-                        visitArray("targets") {
-                            targetList.addAll(it)
-                        }
-                    }
-                    if (!remapping) return@forEach
-
-                    val targetClassList = ObjectArrayList<String>(valueList.size + targetList.size)
-                    valueList.mapTo(targetClassList, Type::getClassName)
-                    targetClassList.addAll(targetList)
-
-                    launch {
-                        targetClassList.forEach {
-                            val classMappingEntry = mapping[it]
-                                ?: throw IllegalStateException("Cannot find mapping for target class $it at ${classNode.name}")
-
-                            mapMethods(classMappingEntry, it, classNode, mapping, classRefmap)
-                            mapAccessors(mapping, classNode, classMappingEntry, classRefmap)
-                        }
-                    }
-
-                    remapMixinTarget(mapping, classEntry, valueList, targetList, result)
                 }
 
-                val jsonElement = gson.toJsonTree(
-                    mapOf(
-                        "mappings" to mixinReferMap,
-                        "data" to mapOf(
-                            mappingName to mixinReferMap
-                        )
-                    )
-                )
-                val entry = JarFileEntry("$refmapBaseName.refmap.json", gson.toBytes(jsonElement))
+                val refmapObj = mixinReferMap.entries
+                    .filter { it.value.isNotEmpty() }
+                    .map { entry -> entry.key to entry.value.toList().sortedBy { it.first } }
+                    .sortedBy { it.first }
+                    .run {
+                        JsonObject().apply {
+                            forEach { (k, v) ->
+                                val o = JsonObject()
+                                v.forEach {
+                                    o.addProperty(it.first, it.second)
+                                }
+                                add(k, o)
+                            }
+                        }
+                    }
+
+                val obj = JsonObject()
+                obj.add("mappings", refmapObj)
+                obj.add("data", JsonObject().apply { add(mappingName, refmapObj) })
+                val entry = JarFileEntry("$refmapBaseName.refmap.json", gson.toBytes(obj))
 
                 synchronized(result) {
                     result.put(entry)
@@ -111,9 +120,11 @@ class GenerateRefmapStage(
         jsonElement: JsonElement
     ): ByteArray {
         val output = ByteArrayOutputStream()
-        val jsonWriter = JsonWriter(OutputStreamWriter(output))
-        jsonWriter.setIndent("    ")
-        this.toJson(jsonElement, jsonWriter)
+        OutputStreamWriter(output).use {
+            val jsonWriter = this.newJsonWriter(it)
+            jsonWriter.setIndent("    ")
+            this.toJson(jsonElement, jsonWriter)
+        }
         return output.toByteArray()
     }
 
@@ -128,9 +139,9 @@ class GenerateRefmapStage(
 
         var remapTargetClass = false
         val newValue = valueList.map {
-            val nameTo = mapping.getNameTo(it.className)
+            val nameTo = mapping.getNameTo(it.internalName)
                 ?: throw IllegalStateException("Cannot find mapping for target class $it at ${classNode.name}")
-            if (nameTo == it.className) {
+            if (nameTo == it.internalName) {
                 it
             } else {
                 remapTargetClass = true
@@ -170,91 +181,200 @@ class GenerateRefmapStage(
         mapping: ClassMapping,
         classRefmap: Object2ObjectOpenHashMap<String, String>
     ) {
-        val classNameTo = classMappingEntry.nameTo
         val methods = ObjectArrayList<String>()
         var remappingMethod = true
-        val atMethods = ObjectArrayList<String>()
-        var remappingAtMethod = true
+        val atTargets = ObjectArrayList<String>()
+        var remappingAtTargets = true
 
-        classNode.methods.asSequence()
-            .mapNotNull {
-                it.annotations.findAnyAnnotation(
-                    "Lorg/spongepowered/asm/mixin/injection/Inject;",
-                    "Lorg/spongepowered/asm/mixin/injection/ModifyArg;",
-                    "Lorg/spongepowered/asm/mixin/injection/ModifyArgs;",
-                    "Lorg/spongepowered/asm/mixin/injection/ModifyConstant;",
-                    "Lorg/spongepowered/asm/mixin/injection/ModifyVariable;",
-                    "Lorg/spongepowered/asm/mixin/injection/Redirect;",
-                )
-            }.forEach { annotationNode ->
-                annotationNode.visit {
+        classNode.methods.forEach { method ->
+            val annotationNode = method.annotations.findAnyAnnotation(
+                "Lorg/spongepowered/asm/mixin/injection/Inject;",
+                "Lorg/spongepowered/asm/mixin/injection/ModifyArg;",
+                "Lorg/spongepowered/asm/mixin/injection/ModifyArgs;",
+                "Lorg/spongepowered/asm/mixin/injection/ModifyConstant;",
+                "Lorg/spongepowered/asm/mixin/injection/ModifyVariable;",
+                "Lorg/spongepowered/asm/mixin/injection/Redirect;",
+            ) ?: return@forEach
+
+            annotationNode.visit {
+                visitValue<Boolean>("remap") {
+                    remappingMethod = it
+                }
+                visitArray<String>("method") {
+                    methods.addAll(it)
+                }
+                visitAnnotation("at", "Lorg/spongepowered/asm/mixin/injection/At;") {
+                    visitValue<String>("target") {
+                        atTargets.add(it)
+                    }
                     visitValue<Boolean>("remap") {
-                        remappingMethod = it
+                        remappingAtTargets = it
                     }
-                    visitArray<String>("method") {
-                        methods.addAll(it)
-                    }
-                    if (remappingMethod) {
-                        methods.forEach { methodRef ->
-                            val match = methodRefRegex.matchEntire(methodRef)
-                            if (match != null) {
-                                val nameFrom = match.groupValues[1]
-                                val descFrom = match.groupValues[2]
-                                val nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
-                                val descTo = mapping.remapDesc(descFrom)
-                                classRefmap[methodRef] = "$classNameTo;$nameTo$descTo"
-                            } else if (methodRef.matches(wildcardMethodRefRegex)) {
-                                error("Wildcard method reference is not supported")
-                            } else {
-                                val nameFrom = methodRef
-                                val methodEntry = classMappingEntry.methodMapping.backingMap?.find {
-                                    it.nameFrom.startsWith(nameFrom)
-                                } ?: throw IllegalStateException("Cannot find method $nameFrom in $targetClass")
-                                val descFrom = methodEntry.desc
+                }
+            }
 
-                                val nameTo = methodEntry.nameTo
-                                val descTo = mapping.remapDesc(descFrom)
-                                classRefmap[methodRef] = "$classNameTo;$nameTo$descTo"
-                            }
+            if (remappingMethod) {
+                methods.forEach method@{ methodRef ->
+                    val match = methodRefRegex.matchEntire(methodRef)
+                    if (match != null) {
+                        val nameFrom = match.groupValues[1]
+                        val descFrom = match.groupValues[2]
+                        mapMethodRef(
+                            mapping,
+                            targetClass,
+                            classMappingEntry,
+                            classRefmap,
+                            methodRef,
+                            nameFrom,
+                            descFrom
+                        )
+                    } else if (wildcardMethodRefRegex.matches(methodRef) || annotationNode.desc == "Lorg/spongepowered/asm/mixin/injection/Inject;") {
+                        if (annotationNode.desc != "Lorg/spongepowered/asm/mixin/injection/Inject;") {
+                            throw IllegalStateException("Wildcard method reference is only allowed for @Inject")
                         }
+                        val descFrom = findDesc(method)
+                            ?: throw IllegalStateException("Cannot find desc for method ${method.name} at $targetClass")
+                        val nameFrom = methodRef.removeSuffix("*")
+                        mapMethodRef(
+                            mapping,
+                            targetClass,
+                            classMappingEntry,
+                            classRefmap,
+                            methodRef,
+                            nameFrom,
+                            descFrom
+                        )
+                    } else {
+                        val toFind = methodRef.removeSuffix("*")
+                        val methodEntry = classMappingEntry.methodMapping.backingMap.find {
+                            it.nameFrom == toFind
+                        } ?: throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+                        val descFrom = methodEntry.desc
+                        mapMethodRef(
+                            mapping,
+                            targetClass,
+                            classMappingEntry,
+                            classRefmap,
+                            methodRef,
+                            methodEntry.nameFrom,
+                            descFrom
+                        )
                     }
-                    methods.clear()
-                    remappingMethod = true
-                    visitArray<AnnotationNode>("at") { list ->
-                        list.filter {
-                            it.desc == "Lorg/spongepowered/asm/mixin/injection/At;"
-                        }.forEach { atAnnotationNode ->
-                            atAnnotationNode.visit {
-                                visitValue<String>("target") {
-                                    atMethods.add(it)
-                                }
-                                visitValue<Boolean>("remap") {
-                                    remappingAtMethod = it
-                                }
-                            }
-                            if (remappingAtMethod) {
-                                atMethods.forEach {
-                                    val match = fullMethodRefRegex.matchEntire(it)
-                                    if (match != null) {
-                                        val ownerFrom = match.groupValues[1]
-                                        val nameFrom = match.groupValues[2]
-                                        val descFrom = match.groupValues[3]
+                }
+            }
+            remappingMethod = true
+            methods.clear()
 
-                                        val targetEntry = mapping[ownerFrom]
-                                        val ownerTo = targetEntry?.nameTo ?: ownerFrom
-                                        val nameTo =
-                                            targetEntry?.methodMapping?.getNameTo(nameFrom, descFrom)
-                                        val descTo = mapping.remapDesc(descFrom)
-                                        classRefmap[it] = "$ownerTo;$nameTo$descTo"
-                                    }
-                                }
-                            }
-                            atMethods.clear()
-                            remappingAtMethod = true
+
+            if (remappingAtTargets) {
+                atTargets.forEach { ref ->
+                    fullMethodRefRegex.matchEntire(ref)?.let {
+                        val ownerFrom = it.groupValues[1]
+                        val nameFrom = it.groupValues[2]
+                        val descFrom = it.groupValues[3]
+
+                        val targetEntry = mapping[ownerFrom]
+                            ?: throw IllegalStateException("Cannot find mapping for target class $ownerFrom at $targetClass")
+                        val ownerTo = targetEntry.nameTo
+                        val nameTo = targetEntry.methodMapping.getNameTo(nameFrom, descFrom)
+                        val descTo = mapping.remapDesc(descFrom)
+                        classRefmap[ref] = "L$ownerTo;$nameTo$descTo"
+                    } ?: fullFieldRefRegex.matchEntire(ref)?.let {
+                        val ownerFrom = it.groupValues[1]
+                        val nameFrom = it.groupValues[2]
+                        val descFrom = it.groupValues[3]
+
+                        val targetEntry = mapping[ownerFrom]
+                            ?: throw IllegalStateException("Cannot find mapping for target class $ownerFrom at $targetClass")
+                        val ownerTo = targetEntry.nameTo
+                        val nameTo =
+                            targetEntry.fieldMapping.getNameTo(nameFrom)
+                        val descTo = mapping.remapDesc(descFrom)
+                        classRefmap[ref] = "L$ownerTo;$nameTo:$descTo"
+                    } ?: run {
+                        val nameTo = mapping.getNameTo(ref.replace('.', '/'))
+                        if (nameTo != null) {
+                            classRefmap[ref] = nameTo
                         }
                     }
                 }
             }
+            remappingAtTargets = true
+            atTargets.clear()
+        }
+    }
+
+    private fun findDesc(method: MethodNode): String? {
+        val parameters = descParamExtractRegex.matchEntire(method.desc)?.groupValues?.get(1) ?: return null
+        val returnType = method.signature?.let {
+            descReturnExtractRegex.matchEntire(it)?.groupValues?.get(1)?.replace(typeParameterRegex, "")
+        } ?: "V"
+        return "($parameters)$returnType"
+    }
+
+    private fun mapMethodRef(
+        mapping: ClassMapping,
+        targetClass: String,
+        classMappingEntry: MappingEntry.Class,
+        classRefmap: Object2ObjectOpenHashMap<String, String>,
+        methodRef: String,
+        nameFrom: String,
+        descFrom0: String
+    ) {
+        var descFrom = descFrom0
+        var nameTo: String?
+
+        if (nameFrom == "<init>") {
+            nameTo =   nameFrom
+        } else {
+            nameTo =   classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
+            if (nameTo == null && descFrom.startsWith("()")) {
+                val returnType = descFrom.substring(2)
+                val candidates = classMappingEntry.methodMapping.backingMap.filter {
+                    it.nameFrom == nameFrom && it.desc.endsWith(returnType)
+                }
+                if (candidates.size == 1) {
+                    nameTo = candidates[0].nameTo
+                    descFrom = candidates[0].desc
+                }
+            }
+        }
+
+        if (nameTo == null) {
+            descFrom = mapToPrimitive(descFrom)
+            nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
+            if (nameTo == null && descFrom.startsWith("()")) {
+                val returnType = descFrom.substring(2)
+                val candidates = classMappingEntry.methodMapping.backingMap.filter {
+                    it.nameFrom == nameFrom && it.desc.endsWith(returnType)
+                }
+                if (candidates.size == 1) {
+                    nameTo = candidates[0].nameTo
+                    descFrom = candidates[0].desc
+                }
+            }
+        }
+        if (nameTo == null) {
+            throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+        }
+        val descTo = mapping.remapDesc(descFrom)
+        classRefmap[methodRef] = "L${classMappingEntry.nameTo};$nameTo$descTo"
+    }
+
+    private fun mapToPrimitive(desc: String): String {
+        return desc.replace(javaLangRegex) {
+            when (it.groupValues[1]) {
+                "Byte" -> "B"
+                "Character" -> "C"
+                "Double" -> "D"
+                "Float" -> "F"
+                "Integer" -> "I"
+                "Long" -> "J"
+                "Short" -> "S"
+                "Boolean" -> "Z"
+                else -> it.value
+            }
+        }
     }
 
     private fun mapAccessors(
@@ -263,18 +383,13 @@ class GenerateRefmapStage(
         classMappingEntry: MappingEntry.Class,
         classRefmap: Object2ObjectOpenHashMap<String, String>
     ) {
-        classNode.methods.asSequence()
-            .mapNotNull { methodNode ->
-                methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Invoker;")
-                    ?.let {
-                        methodNode to it
-                    }
-            }.forEach method@{ (methodNode, annotation) ->
+        classNode.methods.asSequence().forEach method@{ methodNode ->
+            methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Invoker;")?.let {
                 var nameFrom: String? = null
-                for (i in 0 until annotation.values.size step 2) {
-                    when (annotation.values[i] as String) {
+                for (i in 0 until it.values.size step 2) {
+                    when (it.values[i] as String) {
                         "value" -> {
-                            nameFrom = annotation.values[i + 1] as String
+                            nameFrom = it.values[i + 1] as String
                         }
                     }
                 }
@@ -295,46 +410,56 @@ class GenerateRefmapStage(
                 val nameTo =
                     classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom) ?: return@method
                 val descTo = mapping.remapDesc(descFrom)
-                classRefmap[methodNode.name] = "$nameTo$descTo"
-            }
-
-        classNode.fields.asSequence()
-            .mapNotNull { methodNode ->
-                methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Accessor;")
-                    ?.let {
-                        methodNode to it
-                    }
-            }.forEach field@{ (fieldNode, annotation) ->
-                var nameFrom: String? = null
-                for (i in 0 until annotation.values.size step 2) {
-                    when (annotation.values[i] as String) {
-                        "value" -> {
-                            nameFrom = annotation.values[i + 1] as String
+                classRefmap[nameFrom] = "$nameTo$descTo"
+            } ?: methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Accessor;")
+                ?.let { annotation ->
+                    var nameFrom: String? = null
+                    var remapping = true
+                    annotation.visit {
+                        visitValue<String>("value") {
+                            nameFrom = it
+                        }
+                        visitValue<Boolean>("remap") {
+                            remapping = it
                         }
                     }
+                    if (!remapping) return@let
+                    if (nameFrom == null) {
+                        nameFrom = when {
+                            methodNode.name.startsWith("get") -> {
+                                methodNode.name.substring(3)
+                            }
+                            methodNode.name.startsWith("set") -> {
+                                methodNode.name.substring(3)
+                            }
+                            else -> {
+                                throw IllegalStateException("Cannot find name for accessor ${methodNode.name}")
+                            }
+                        }
+                        nameFrom = nameFrom!!.replaceFirstChar(Char::lowercaseChar)
+                    }
+                    val descFrom = paramerterTypeDescRegex.matchEntire(methodNode.desc)?.groupValues?.get(1)
+                        ?: returnTypeDescRegex.matchEntire(methodNode.desc)!!.groupValues[1]
+                    val nameTo = classMappingEntry.fieldMapping.getNameTo(nameFrom!!)
+                        ?: throw IllegalStateException("Cannot find mapping for accessor ${methodNode.name}")
+                    val descTo = mapping.remapDesc(descFrom)
+                    classRefmap[nameFrom] = "$nameTo:$descTo"
                 }
-                if (nameFrom == null) {
-                    nameFrom = when {
-                        fieldNode.name.startsWith("get") -> {
-                            fieldNode.name.substring(3)
-                        }
-                        fieldNode.name.startsWith("set") -> {
-                            fieldNode.name.substring(3)
-                        }
-                        else -> {
-                            throw IllegalStateException("Cannot find name for accessor ${fieldNode.name}")
-                        }
-                    }
-                    nameFrom = nameFrom!!.replaceFirstChar(Char::lowercaseChar)
-                }
-                val nameTo = classMappingEntry.fieldMapping.getNameTo(nameFrom!!) ?: return@field
-                classRefmap[fieldNode.name] = "$nameTo:${classMappingEntry.nameTo}"
-            }
+        }
     }
 
     private companion object {
+        val typeParameterRegex = "<.+>".toRegex()
+        val javaLangRegex = "Ljava/lang/(.+?);".toRegex()
+        val paramerterTypeDescRegex = "\\((.+)\\).+".toRegex()
+        val returnTypeDescRegex = "\\(\\)(.+)".toRegex()
+        val descParamExtractRegex =
+            "\\((.*)Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo.*?;.*\\).+".toRegex()
+        val descReturnExtractRegex =
+            "\\(.*Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable<(L.+;)>;.*\\).+".toRegex()
         val methodRefRegex = "([^;/\\s\\n]+)(\\(.*\\).+)".toRegex()
         val wildcardMethodRefRegex = "([^;/\\s\\n]+)\\*".toRegex()
-        val fullMethodRefRegex = "L(.+;)(.+)(\\(.*\\).+)".toRegex()
+        val fullMethodRefRegex = "L(.+);(.+)(\\(.*\\).+)".toRegex()
+        val fullFieldRefRegex = "L(.+);(.+):(\\[*(?:L.+;|[BCDFIJSZ]))".toRegex()
     }
 }

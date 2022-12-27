@@ -51,7 +51,8 @@ object InternalMappingParser {
     }
 
     fun write(appendable: Appendable, classMapping: ClassMapping) {
-        for (entry in classMapping.sortedArray()) {
+        val sortedArray = classMapping.sortedArray()
+        for (entry in sortedArray) {
             write(appendable, entry)
         }
     }

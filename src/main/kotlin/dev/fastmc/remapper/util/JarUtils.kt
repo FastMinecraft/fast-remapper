@@ -1,9 +1,10 @@
 package dev.fastmc.remapper.util
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.tree.ClassNode
+import org.gradle.api.internal.file.copy.CopyActionProcessingStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
@@ -11,38 +12,22 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 object JarUtils {
-    suspend fun readClassNodes(input: File): List<ClassNode> {
-        return coroutineScope {
-            val unpacked = unpackFlow(input) {
-                !it.isDirectory && it.name.endsWith(".class")
-            }.flowOn(Dispatchers.IO)
-            return@coroutineScope unpacked.map {
-                async {
-                    val classReader = ClassReader(it.second)
-                    val classNode = ClassNode()
-                    classReader.accept(
-                        classNode,
-                        ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES
-                    )
-                    classNode
-                }
-            }.toList().awaitAll()
-        }
-    }
 
-    inline fun unpackFlow(
-        input: File,
-        crossinline predicate: (ZipEntry) -> Boolean
-    ): Flow<Pair<String, ByteArray?>> {
-        return flow {
-            ZipInputStream(input.inputStream().buffered(1024 * 1024)).use { stream ->
-                while (true) {
-                    val entry = stream.nextEntry ?: break
-                    if (!predicate(entry)) continue
-                    emit(entry.name to (if (entry.isDirectory) null else stream.readBytes()))
+    fun unpackFlow(scope: CoroutineScope, input: CopyActionProcessingStream): Flow<Pair<String, ByteArray?>> {
+        val channel = Channel<Pair<String, ByteArray?>>(Channel.UNLIMITED)
+        scope.launch {
+            input.process {
+                if (it.isDirectory) {
+                    channel.trySend(it.relativePath.pathString + '/' to null)
+                } else {
+                    val outputStream = ByteArrayOutputStream()
+                    it.copyTo(outputStream)
+                    channel.trySend(it.relativePath.pathString to outputStream.toByteArray())
                 }
             }
+            channel.close()
         }
+        return channel.consumeAsFlow()
     }
 
     fun unpackFlow(input: File): Flow<Pair<String, ByteArray?>> {
