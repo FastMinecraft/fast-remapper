@@ -89,3 +89,7 @@ fun List<AnnotationNode>.findAnyAnnotation(vararg descriptors: String): Annotati
     val set = ObjectOpenHashSet(descriptors)
     return find { set.contains(it.desc) }
 }
+
+fun ClassNode.findMixinAnnotation(): AnnotationNode? {
+    return annotations.findAnnotation("Lorg/spongepowered/asm/mixin/Mixin;")
+}

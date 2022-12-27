@@ -1,38 +1,42 @@
 package dev.fastmc.jartools.mapping
 
+import dev.fastmc.asmkt.visit
+import dev.fastmc.jartools.pipeline.ClassEntry
 import dev.fastmc.jartools.util.SubclassInfo
 import dev.fastmc.jartools.util.annotations
 import dev.fastmc.jartools.util.containsAnnotation
+import dev.fastmc.jartools.util.findMixinAnnotation
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import org.objectweb.asm.AnnotationVisitor
-import org.objectweb.asm.ClassVisitor
-import org.objectweb.asm.Opcodes
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.ClassNode
 
 interface MappingPipeline {
-    suspend fun get(
-        prev: Deferred<ClassMapping>?,
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping
+    suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping
 
-    suspend fun get(
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping {
-        return get(null, classNodes)
+    suspend fun get(classEntries: Collection<ClassEntry>): ClassMapping {
+        return get(null, classEntries)
     }
 }
 
-class SubClassRemapPipeline(private val inputClassNodes: Deferred<Collection<ClassNode>>) : MappingPipeline {
-    override suspend fun get(
-        prev: Deferred<ClassMapping>?,
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping {
-        require(prev != null) { "SubClassRemapPipeline requires a previous mapping" }
+class SubclassMappingPipeline(private val externalClasses: Deferred<Collection<ClassEntry>>) : MappingPipeline {
+    override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
+        require(prev != null) { "SubclassMappingPipeline requires a previous mapping" }
         return coroutineScope {
-            val subclassInfoDeferred = async { SubclassInfo(inputClassNodes.await()) }
+            val subclassInfoDeferred = async {
+                val inputClasses = Object2ObjectOpenHashMap<String, ClassNode>()
+                classEntries.forEach {
+                    inputClasses[it.className] = it.classNode
+                }
+                externalClasses.await().forEach {
+                    inputClasses[it.className] = it.classNode
+                }
+                SubclassInfo(inputClasses.values)
+            }
 
             val result: MutableClassMapping = MutableClassMapping()
             result.addAll(prev.await())
@@ -65,60 +69,69 @@ class SubClassRemapPipeline(private val inputClassNodes: Deferred<Collection<Cla
     }
 }
 
-class MixinRemapPipeline(private val mixinClassesDeferred: Deferred<Map<String, ClassNode>>) : MappingPipeline {
-    override suspend fun get(
-        prev: Deferred<ClassMapping>?,
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping {
-        require(prev != null) { "MixinRemapPipeline requires a previous mapping" }
+class MixinMappingPipeline() : MappingPipeline {
+    override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
+        require(prev != null) { "MixinMappingPipeline requires a previous mapping" }
         return coroutineScope {
             val result: MutableClassMapping = MutableClassMapping()
             val prevMapping = prev.await()
             result.addAll(prevMapping)
 
-            mixinClassesDeferred.await().values.forEach { classNode ->
-                classNode.accept(object : ClassVisitor(Opcodes.ASM9) {
-                    override fun visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor? {
-                        return if (descriptor == "Lorg/spongepowered/asm/mixin/Mixin;") {
-                            object : AnnotationVisitor(Opcodes.ASM9) {
-                                override fun visitArray(name: String): AnnotationVisitor? {
-                                    return if (name == "value" || name == "targets") {
-                                        object : AnnotationVisitor(Opcodes.ASM9) {
-                                            override fun visit(n: String?, value: Any) {
-                                                if (value !is Type) return
-                                                prevMapping.get(value.internalName)?.let { mixinMapping ->
-                                                    var set: MappingEntry.MutableClass? = null
-                                                    mixinMapping.methodMapping.backingMap.forEachFast {
-                                                        if (set == null) {
-                                                            set = result.getOrCreate(classNode.name)
-                                                        }
-                                                        set!!.methodMapping.add(it)
-                                                    }
-
-                                                    mixinMapping.fieldMapping.backingMap.forEachFast loop@{ mapping ->
-                                                        if (classNode.fields.none { fieldNode ->
-                                                                fieldNode.name == mapping.nameFrom
-                                                                        && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
-                                                            }) return@loop
-
-                                                        if (set == null) {
-                                                            set = result.getOrCreate(classNode.name)
-                                                        }
-                                                        set!!.fieldMapping.add(mapping)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        super.visitArray(name)
+            classEntries.forEach { classEntry ->
+                val classNode = classEntry.classNode
+                val mixinAnnotation = classNode.findMixinAnnotation() ?: return@forEach
+                mixinAnnotation.visit {
+                    visitArray<Type>("value") { v ->
+                        v.forEach { type ->
+                            prevMapping.get(type.internalName)?.let {
+                                var set: MappingEntry.MutableClass? = null
+                                it.methodMapping.backingMap.forEachFast {
+                                    if (set == null) {
+                                        set = result.getOrCreate(classNode.name)
                                     }
+                                    set!!.methodMapping.add(it)
+                                }
+
+                                it.fieldMapping.backingMap.forEachFast loop@{ mapping ->
+                                    if (classNode.fields.none { fieldNode ->
+                                            fieldNode.name == mapping.nameFrom
+                                                    && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
+                                        }) return@loop
+
+                                    if (set == null) {
+                                        set = result.getOrCreate(classNode.name)
+                                    }
+                                    set!!.fieldMapping.add(mapping)
                                 }
                             }
-                        } else {
-                            super.visitAnnotation(descriptor, visible)
                         }
                     }
-                })
+                    visitArray<String>("targets") { v ->
+                        v.forEach { target ->
+                            prevMapping.get(target)?.let {
+                                var set: MappingEntry.MutableClass? = null
+                                it.methodMapping.backingMap.forEachFast {
+                                    if (set == null) {
+                                        set = result.getOrCreate(classNode.name)
+                                    }
+                                    set!!.methodMapping.add(it)
+                                }
+
+                                it.fieldMapping.backingMap.forEachFast loop@{ mapping ->
+                                    if (classNode.fields.none { fieldNode ->
+                                            fieldNode.name == mapping.nameFrom
+                                                    && fieldNode.annotations.containsAnnotation("Lorg/spongepowered/asm/mixin/Shadow;")
+                                        }) return@loop
+
+                                    if (set == null) {
+                                        set = result.getOrCreate(classNode.name)
+                                    }
+                                    set!!.fieldMapping.add(mapping)
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             result.asImmutable()
@@ -126,17 +139,30 @@ class MixinRemapPipeline(private val mixinClassesDeferred: Deferred<Map<String, 
     }
 }
 
-class SequenceRemapPipeline(private vararg val providers: MappingPipeline) : MappingPipeline {
+class CachedMappingPipeline(private val pipeline: MappingPipeline) : MappingPipeline {
+    private var cache: ClassMapping? = null
+    private val mutex = Mutex()
+
+    override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
+        return mutex.withLock {
+            var mapping = cache
+            if (mapping == null) {
+                mapping = pipeline.get(prev, classEntries)
+                cache = mapping
+            }
+            mapping
+        }
+    }
+}
+
+class SequenceMappingPipeline(private vararg val providers: MappingPipeline) : MappingPipeline {
     init {
         require(providers.isNotEmpty()) { "No providers provided" }
     }
 
     private var cached: ClassMapping? = null
 
-    override suspend fun get(
-        prev: Deferred<ClassMapping>?,
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping {
+    override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
         val cached = cached
         if (cached != null) return cached
 
@@ -144,7 +170,7 @@ class SequenceRemapPipeline(private vararg val providers: MappingPipeline) : Map
         return coroutineScope {
             val deferredList = providers.map {
                 val argDeferred = prevDeferred
-                val current = async { it.get(argDeferred, classNodes) }
+                val current = async { it.get(argDeferred, classEntries) }
                 prevDeferred = current
                 current
             }
@@ -154,17 +180,14 @@ class SequenceRemapPipeline(private vararg val providers: MappingPipeline) : Map
                 result.addAll(deferred.await())
             }
 
-            this@SequenceRemapPipeline.cached = result.asImmutable()
+            this@SequenceMappingPipeline.cached = result.asImmutable()
             result.asImmutable()
         }
     }
 }
 
-class MappingProviderPipeline(private val deferred: Deferred<ClassMapping>): MappingPipeline {
-    override suspend fun get(
-        prev: Deferred<ClassMapping>?,
-        classNodes: Deferred<Collection<ClassNode>>
-    ): ClassMapping {
+class MappingProviderPipeline(private val deferred: Deferred<ClassMapping>) : MappingPipeline {
+    override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
         return deferred.await()
     }
 }

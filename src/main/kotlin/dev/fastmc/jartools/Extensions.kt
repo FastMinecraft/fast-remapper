@@ -3,16 +3,18 @@ package dev.fastmc.jartools
 import dev.fastmc.jartools.mapping.MappingName
 import dev.fastmc.jartools.util.McVersion
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.jvm.tasks.Jar
 import java.io.File
 
-abstract class JarToolsExtension {
+abstract class FastRemapperExtension {
     lateinit var projectCacheDir: File
 
     abstract val accessWidener: Property<String>
     abstract val mapping: Property<MappingName>
+    abstract val minecraftJar: RegularFileProperty
 
     var mcVersion = McVersion.UNKNOWN; private set
     lateinit var type: ProjectType; private set

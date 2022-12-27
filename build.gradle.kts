@@ -19,6 +19,7 @@ dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
+    implementation("com.google.code.gson:gson:2.10")
     implementation("it.unimi.dsi:fastutil:8.5.11")
 
     implementation("org.ow2.asm:asm-commons:9.4")

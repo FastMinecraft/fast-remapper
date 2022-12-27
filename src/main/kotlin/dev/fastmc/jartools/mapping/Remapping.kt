@@ -1,9 +1,10 @@
 package dev.fastmc.jartools.mapping
 
+import dev.fastmc.jartools.pipeline.ClassEntry
 import dev.fastmc.jartools.util.annotations
 import dev.fastmc.jartools.util.containsAnnotation
+import dev.fastmc.jartools.util.findMixinAnnotation
 import org.objectweb.asm.commons.Remapper
-import org.objectweb.asm.tree.ClassNode
 
 open class AsmRemapper(private val classMapping: ClassMapping) : Remapper() {
     override fun mapMethodName(owner: String, name: String, descriptor: String): String {
@@ -21,11 +22,15 @@ open class AsmRemapper(private val classMapping: ClassMapping) : Remapper() {
 
 class MixinRemapper(
     classMapping: ClassMapping,
-    private val mixinClasses: Map<String, ClassNode>
+    classEntries: Collection<ClassEntry>
 ) : AsmRemapper(classMapping) {
+    private val mixinClasses = classEntries.asSequence()
+        .map { it.classNode }
+        .filter { it.findMixinAnnotation() != null }
+        .associateBy { it.name }
+
     override fun mapFieldName(owner: String, name: String, descriptor: String): String {
-        val classNode =
-            mixinClasses[owner] ?: return super.mapFieldName(owner, name, descriptor)
+        val classNode = mixinClasses[owner] ?: return super.mapFieldName(owner, name, descriptor)
 
         var newName = ""
         classNode.fields.find { it.name == name && it.desc == descriptor }
