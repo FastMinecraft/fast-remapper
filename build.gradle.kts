@@ -27,6 +27,8 @@ repositories {
 }
 
 dependencies {
+    testImplementation(kotlin("test"))
+
     implementation(kotlin("stdlib-jdk8"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
 
@@ -55,6 +57,10 @@ kotlin {
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+    }
+
     withType<JavaCompile> {
         options.encoding = "UTF-8"
     }
