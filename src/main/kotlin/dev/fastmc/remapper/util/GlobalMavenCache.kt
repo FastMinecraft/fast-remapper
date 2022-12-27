@@ -8,7 +8,7 @@ import java.net.URL
 
 object GlobalMavenCache {
     private val scope = CoroutineScope(Dispatchers.Default)
-    private val cacheDir by lazy { File(Shared.globalCacheDir, "maven") }
+    private val cacheDir get() = Shared.mavenCacheDir
 
     private val mavenRegex = "maven.*?/(.*)".toRegex()
 
