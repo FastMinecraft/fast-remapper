@@ -1,2 +1,2 @@
-# jar-tools
-Jar package tools for Minecraft mods
+# fast-remapper
+Remap tool for Minecraft mods
