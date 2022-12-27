@@ -19,16 +19,33 @@ enum class ExternalMappingParser {
 
                 if (it[0] == 'c') {
                     val split = it.subSequence(2, it.length).split('\t')
-                    lastClassEntry = result.getOrCreate(split[0], split[1])
+                    lastClassEntry = result.getOrCreate(
+                        split[0],
+                        split[1].ifEmpty { split[0] }
+                    )
                 } else {
                     when (it[1]) {
                         'f' -> {
                             val split = it.subSequence(3, it.length).split('\t')
-                            lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[1], split[2]))
+                            val prevSize = lastClassEntry!!.fieldMapping.size
+                            lastClassEntry!!.fieldMapping.add(
+                                MappingEntry.Field(
+                                    split[1],
+                                    split[2].ifEmpty { split[1] })
+                            )
+                            assert(lastClassEntry!!.fieldMapping.size == prevSize + 1)
                         }
                         'm' -> {
                             val split = it.subSequence(3, it.length).split('\t')
-                            lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[1], split[0], split[2]))
+                            val prevSize = lastClassEntry!!.methodMapping.size
+                            lastClassEntry!!.methodMapping.add(
+                                MappingEntry.Method(
+                                    split[0],
+                                    split[1],
+                                    split[2].ifEmpty { split[0] }
+                                )
+                            )
+                            assert(lastClassEntry!!.methodMapping.size == prevSize + 1)
                         }
                         else -> {
                             // Ignored
@@ -56,19 +73,31 @@ enum class ExternalMappingParser {
                 if (it[0] != '\t') {
                     val split = it.split(' ')
                     val prevSize = result.size
-                    lastClassEntry = result.getOrCreate(split[0], split[1])
+                    lastClassEntry = result.getOrCreate(
+                        split[0],
+                        split[1].ifEmpty { split[0] }
+                    )
                     assert(result.size == prevSize + 1)
                 } else if (it[1] != '\t') {
                     val split = it.subSequence(1, it.length).split(' ')
                     if (split.size >= 3) {
                         val prevSize = lastClassEntry!!.methodMapping.size
-                        val nameTo = if (split[1].isEmpty()) split[2] else split[0]
-                        lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], nameTo))
+                        lastClassEntry!!.methodMapping.add(
+                            MappingEntry.Method(
+                                split[0],
+                                split[1],
+                                split[2].ifEmpty { split[0] }
+                            )
+                        )
                         assert(lastClassEntry!!.methodMapping.size == prevSize + 1)
                     } else {
                         val prevSize = lastClassEntry!!.fieldMapping.size
-                        val nameTo = if (split[1].isEmpty()) split[0] else split[1]
-                        lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], nameTo))
+                        lastClassEntry!!.fieldMapping.add(
+                            MappingEntry.Field(
+                                split[0],
+                                split[1].ifEmpty { split[0] }
+                            )
+                        )
                         assert(lastClassEntry!!.fieldMapping.size == prevSize + 1)
                     }
                 }
