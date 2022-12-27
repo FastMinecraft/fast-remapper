@@ -62,11 +62,13 @@ enum class ExternalMappingParser {
                     val split = it.subSequence(1, it.length).split(' ')
                     if (split.size >= 3) {
                         val prevSize = lastClassEntry!!.methodMapping.size
-                        lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], split[2]))
+                        val nameTo = if (split[1].isEmpty()) split[2] else split[0]
+                        lastClassEntry!!.methodMapping.add(MappingEntry.Method(split[0], split[1], nameTo))
                         assert(lastClassEntry!!.methodMapping.size == prevSize + 1)
                     } else {
                         val prevSize = lastClassEntry!!.fieldMapping.size
-                        lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], split[1]))
+                        val nameTo = if (split[1].isEmpty()) split[0] else split[1]
+                        lastClassEntry!!.fieldMapping.add(MappingEntry.Field(split[0], nameTo))
                         assert(lastClassEntry!!.fieldMapping.size == prevSize + 1)
                     }
                 }
