@@ -9,6 +9,7 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
+    maven("https://maven.fastmc.dev/")
 }
 
 dependencies {
@@ -19,6 +20,7 @@ dependencies {
 
     implementation("org.ow2.asm:asm-commons:9.4")
     implementation("org.ow2.asm:asm-tree:9.4")
+    implementation("dev.fastmc:ow2-asm-ktdsl:1.0-SNAPSHOT")
 }
 
 java {
