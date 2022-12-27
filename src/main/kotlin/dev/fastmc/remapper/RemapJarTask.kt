@@ -44,12 +44,13 @@ abstract class RemapJarTask @Inject constructor(private val jarTask: Jar) : Abst
                 val tasks = ObjectArrayList<Stage>()
                 val projectMapping = extension.mapping.get()
                 val mapping = getMapping(projectMapping)
+                val refmapBaseName = archiveFileName.get().removeSuffix(".${archiveExtension.get()}")
                 when (extension.type) {
                     FastRemapperExtension.ProjectType.FORGE -> {
-                        tasks.add(GenerateRefmapStage(mapping))
+                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "searge", extension.mixinConfigs))
                     }
                     FastRemapperExtension.ProjectType.FABRIC -> {
-                        tasks.add(GenerateRefmapStage(mapping))
+                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "named:intermediary", extension.mixinConfigs))
                     }
                 }
                 tasks.add(object : RemapStage() {

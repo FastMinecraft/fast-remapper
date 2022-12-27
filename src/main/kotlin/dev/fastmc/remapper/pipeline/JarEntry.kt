@@ -9,7 +9,11 @@ import org.objectweb.asm.tree.ClassNode
 
 open class JarEntry(val fileName: String)
 
-open class JarFileEntry(fileName: String, val bytes: ByteArray) : JarEntry(fileName)
+open class JarFileEntry(fileName: String, val bytes: ByteArray) : JarEntry(fileName) {
+    open fun update(newBytes: ByteArray): JarFileEntry {
+        return JarFileEntry(fileName, newBytes)
+    }
+}
 
 class ClassEntry(fileName: String, bytes: ByteArray, val parseOptions: Int = 0) : JarFileEntry(fileName, bytes) {
     private val classNode0 by lazy { ClassNode().apply { classReader.accept(this, parseOptions) } }
@@ -18,7 +22,7 @@ class ClassEntry(fileName: String, bytes: ByteArray, val parseOptions: Int = 0) 
     val classNode by lazy { ClassNode().apply { classNode0.accept(this) } }
     val className get() = classNode0.name
 
-    fun update(newBytes: ByteArray): ClassEntry {
+    override fun update(newBytes: ByteArray): ClassEntry {
         return ClassEntry(
             fileName,
             newBytes,

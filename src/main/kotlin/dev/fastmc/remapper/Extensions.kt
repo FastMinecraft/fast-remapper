@@ -21,7 +21,7 @@ abstract class FastRemapperExtension {
     private val mixinConfigs0 = ObjectArrayList<String>()
     private val jarTasks0 = ObjectArrayList<Jar>()
 
-    val mixinConfig: List<String> get() = mixinConfigs0
+    val mixinConfigs: List<String> get() = mixinConfigs0
     val jarTasks: List<Jar> get() = jarTasks0
 
     fun mcVersion(version: String) {

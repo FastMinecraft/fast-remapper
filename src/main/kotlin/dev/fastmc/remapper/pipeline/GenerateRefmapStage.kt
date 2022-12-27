@@ -1,5 +1,10 @@
 package dev.fastmc.remapper.pipeline
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonWriter
 import dev.fastmc.asmkt.visit
 import dev.fastmc.remapper.mapping.*
 import dev.fastmc.remapper.util.annotations
@@ -13,59 +18,103 @@ import kotlinx.coroutines.launch
 import org.objectweb.asm.Type
 import org.objectweb.asm.tree.AnnotationNode
 import org.objectweb.asm.tree.ClassNode
+import java.io.ByteArrayOutputStream
+import java.io.OutputStreamWriter
 
-class GenerateRefmapStage(private val mappingPipeline: MappingPipeline) : Stage {
+class GenerateRefmapStage(
+    private val mappingPipeline: MappingPipeline,
+    private val refmapBaseName: String,
+    private val mappingName: String,
+    private val mixinConfigs: List<String>
+) : Stage {
     override suspend fun run(files: Map<String, JarEntry>): Map<String, JarEntry> {
-        val result = Object2ObjectOpenHashMap(files)
-        val classEntries = files.values.filterIsInstance<ClassEntry>()
-        val mixinReferMap = Object2ObjectOpenHashMap<String, Object2ObjectOpenHashMap<String, String>>()
-        val mapping = mappingPipeline.get(classEntries)
+        return coroutineScope {
+            val result = Object2ObjectOpenHashMap(files)
+            val classEntries = files.values.filterIsInstance<ClassEntry>()
+            val mixinReferMap = Object2ObjectOpenHashMap<String, Object2ObjectOpenHashMap<String, String>>()
+            val mapping = mappingPipeline.get(classEntries)
+            val gson = GsonBuilder().setPrettyPrinting().create()
 
-        coroutineScope {
-            classEntries.forEach { classEntry ->
-                val classNode = classEntry.classNode
-                val mixinAnnotation = classNode.findMixinAnnotation() ?: return@forEach
+            launch {
+                classEntries.forEach { classEntry ->
+                    val classNode = classEntry.classNode
+                    val mixinAnnotation = classNode.findMixinAnnotation() ?: return@forEach
 
-                val classRefmap = Object2ObjectOpenHashMap<String, String>()
-                require(mixinReferMap.put(classNode.name, classRefmap) == null) {
-                    "Duplicate mixin class ${classNode.name}"
+                    val classRefmap = Object2ObjectOpenHashMap<String, String>()
+                    require(mixinReferMap.put(classNode.name, classRefmap) == null) {
+                        "Duplicate mixin class ${classNode.name}"
+                    }
+
+                    var remapping = true
+                    val valueList = ObjectArrayList<Type>()
+                    val targetList = ObjectArrayList<String>()
+                    mixinAnnotation.visit {
+                        visitValue<Boolean>("remap") {
+                            remapping = it
+                        }
+                        visitArray("value") {
+                            valueList.addAll(it)
+                        }
+                        visitArray("targets") {
+                            targetList.addAll(it)
+                        }
+                    }
+                    if (!remapping) return@forEach
+
+                    val targetClassList = ObjectArrayList<String>(valueList.size + targetList.size)
+                    valueList.mapTo(targetClassList, Type::getClassName)
+                    targetClassList.addAll(targetList)
+
+                    launch {
+                        targetClassList.forEach {
+                            val classMappingEntry = mapping[it]
+                                ?: throw IllegalStateException("Cannot find mapping for target class $it at ${classNode.name}")
+
+                            mapMethods(classMappingEntry, it, classNode, mapping, classRefmap)
+                            mapAccessors(mapping, classNode, classMappingEntry, classRefmap)
+                        }
+                    }
+
+                    remapMixinTarget(mapping, classEntry, valueList, targetList, result)
                 }
 
-                var remapping = true
-                val valueList = ObjectArrayList<Type>()
-                val targetList = ObjectArrayList<String>()
-                mixinAnnotation.visit {
-                    visitValue<Boolean>("remap") {
-                        remapping = it
-                    }
-                    visitArray("value") {
-                        valueList.addAll(it)
-                    }
-                    visitArray("targets") {
-                        targetList.addAll(it)
-                    }
+                val jsonElement = gson.toJsonTree(
+                    mapOf(
+                        "mappings" to mixinReferMap,
+                        "data" to mapOf(
+                            mappingName to mixinReferMap
+                        )
+                    )
+                )
+                val entry = JarFileEntry("$refmapBaseName.refmap.json", gson.toBytes(jsonElement))
+
+                synchronized(result) {
+                    result.put(entry)
                 }
-                if (!remapping) return@forEach
-
-                val targetClassList = ObjectArrayList<String>(valueList.size + targetList.size)
-                valueList.mapTo(targetClassList, Type::getClassName)
-                targetClassList.addAll(targetList)
-
-                launch {
-                    targetClassList.forEach {
-                        val classMappingEntry = mapping[it]
-                            ?: throw IllegalStateException("Cannot find mapping for target class $it at ${classNode.name}")
-
-                        mapMethods(classMappingEntry, it, classNode, mapping, classRefmap)
-                        mapAccessors(mapping, classNode, classMappingEntry, classRefmap)
-                    }
-                }
-
-                remapMixinTarget(mapping, classEntry, valueList, targetList, result)
             }
-        }
 
-        return result
+            mixinConfigs.forEach {
+                val entry = result[it] as? JarFileEntry ?: return@forEach
+                val obj = JsonParser.parseString(entry.bytes.decodeToString()).asJsonObject
+                obj.addProperty("refmap", "$refmapBaseName.refmap.json")
+                val newEntry = entry.update(gson.toBytes(obj))
+                synchronized(result) {
+                    result.put(newEntry)
+                }
+            }
+
+            result
+        }
+    }
+
+    private fun Gson.toBytes(
+        jsonElement: JsonElement
+    ): ByteArray {
+        val output = ByteArrayOutputStream()
+        val jsonWriter = JsonWriter(OutputStreamWriter(output))
+        jsonWriter.setIndent("    ")
+        this.toJson(jsonElement, jsonWriter)
+        return output.toByteArray()
     }
 
     private fun remapMixinTarget(
@@ -108,7 +157,9 @@ class GenerateRefmapStage(private val mappingPipeline: MappingPipeline) : Stage 
                     "targets" -> newMixinAnnotation.values[i + 1] = newTargets
                 }
             }
-            result.put(classEntry.update(classNode))
+            synchronized(result) {
+                result.put(classEntry.update(classNode))
+            }
         }
     }
 
