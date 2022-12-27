@@ -299,7 +299,7 @@ sealed interface MappingProvider<T : MappingName> {
             }
         }
 
-        suspend fun getYarn2Mcp(mcVersion: McVersion, mcp: MappingName.Mcp, yarn: MappingName.Yarn): ClassMapping {
+        suspend fun getYarn2Mcp(mcVersion: McVersion, yarn: MappingName.Yarn, mcp: MappingName.Mcp): ClassMapping {
             return getOrCompute(mcVersion, yarn, mcp) {
                 getMcp2Yarn(mcVersion, mcp, yarn).reversed()
             }
