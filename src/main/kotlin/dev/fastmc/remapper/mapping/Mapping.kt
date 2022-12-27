@@ -354,19 +354,24 @@ fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
     val result = MutableClassMapping()
 
     this.backingMap.forEachFast { c ->
+        val otherClassEntry = other.get(c.nameTo)!!
         val classEntry = MappingEntry.MutableClass(c.nameFrom, other.getNameTo(c.nameTo)!!)
         result.add(classEntry)
 
         c.fieldMapping.backingMap.forEachFast { fieldEntry ->
-            classEntry.fieldMapping.add(MappingEntry.Field(fieldEntry.nameFrom, other.getNameTo(fieldEntry.nameTo)!!))
+            classEntry.fieldMapping.add(MappingEntry.Field(
+                fieldEntry.nameFrom,
+                otherClassEntry.fieldMapping.getNameTo(fieldEntry.nameTo)!!
+            ))
         }
 
         c.methodMapping.backingMap.forEachFast { methodEntry ->
+            val desc = this.remapDesc(methodEntry.desc)
             classEntry.methodMapping.add(
                 MappingEntry.Method(
                     methodEntry.nameFrom,
-                    this.remapDesc(methodEntry.desc),
-                    other.getNameTo(methodEntry.nameTo)!!
+                    desc,
+                    otherClassEntry.methodMapping.getNameTo(methodEntry.nameTo, desc)!!
                 )
             )
         }
