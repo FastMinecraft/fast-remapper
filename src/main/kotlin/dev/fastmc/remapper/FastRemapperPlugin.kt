@@ -8,7 +8,7 @@ import java.io.File
 class FastRemapperPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         Shared.globalCacheDir = File(project.gradle.gradleUserHomeDir, "caches/jar-tools").also { it.mkdirs() }
-        val extension = project.extensions.create("jarTools", FastRemapperExtension::class.java).apply {
+        val extension = project.extensions.create("fastRemapper", FastRemapperExtension::class.java).apply {
             projectCacheDir = File(project.projectDir, ".gradle/jar-tools").also { it.mkdirs() }
         }
 
