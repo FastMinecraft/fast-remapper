@@ -153,6 +153,10 @@ sealed class MappingEntry constructor(
         return ((hash ushr 32) xor hash).toInt()
     }
 
+    override fun toString(): String {
+        return "($nameFrom->$nameTo)"
+    }
+
     protected class HashCache {
         constructor()
         constructor(hash: Long) {
@@ -184,10 +188,6 @@ sealed class MappingEntry constructor(
 
         override fun hash(): Long {
             return hash(nameFrom)
-        }
-
-        override fun toString(): String {
-            return "($nameFrom->$nameTo)"
         }
 
         companion object {
