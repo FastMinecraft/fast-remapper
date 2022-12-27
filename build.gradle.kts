@@ -59,6 +59,12 @@ kotlin {
 tasks {
     test {
         useJUnitPlatform()
+        val args = mutableSetOf("-Xmx2G")
+        System.getProperty("org.gradle.jvmargs")
+            ?.split("\\s+".toRegex())?.toCollection(args)
+        (rootProject.findProperty("org.gradle.jvmargs") as? String)
+            ?.split("\\s+".toRegex())?.toCollection(args)
+        jvmArgs = args.toList()
     }
 
     withType<JavaCompile> {
