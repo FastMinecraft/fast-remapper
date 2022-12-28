@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.util
+package dev.fastmc.remapper.util
 
 import java.io.File
 import java.security.MessageDigest

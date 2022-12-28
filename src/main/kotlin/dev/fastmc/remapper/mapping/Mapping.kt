@@ -1,6 +1,6 @@
 @file:Suppress("NOTHING_TO_INLINE", "DuplicatedCode", "unused")
 
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 import it.unimi.dsi.fastutil.objects.*
 
@@ -15,6 +15,14 @@ sealed interface MutableMappingEntryMap<T : MappingEntry> : MappingEntryMap<T> {
     fun add(entry: T)
     fun addAll(entries: ObjectCollection<T>)
     fun addAll(entries: MappingEntryMap<in T>)
+}
+
+fun String.hashCodeLong(): Long {
+    var result = 0L
+    for (i in this.indices) {
+        result = 0x155L * result + this[i].code.toLong()
+    }
+    return result
 }
 
 class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
@@ -86,7 +94,7 @@ inline fun MutableClassMapping.asImmutable(): ClassMapping {
     return this as ClassMapping
 }
 
-inline fun ClassMapping.get(nameFrom: String): MappingEntry.Class? {
+inline operator fun ClassMapping.get(nameFrom: String): MappingEntry.Class? {
     return (this as MutableMappingEntryMapImpl).get(MappingEntry.Class.hash(nameFrom))
 }
 
@@ -153,6 +161,10 @@ sealed class MappingEntry constructor(
         return ((hash ushr 32) xor hash).toInt()
     }
 
+    override fun toString(): String {
+        return "($nameFrom->$nameTo)"
+    }
+
     protected class HashCache {
         constructor()
         constructor(hash: Long) {
@@ -186,17 +198,13 @@ sealed class MappingEntry constructor(
             return hash(nameFrom)
         }
 
-        override fun toString(): String {
-            return "($nameFrom->$nameTo)"
-        }
-
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code
-                result = 31 * result + nameFrom[nameFrom.length - 1].code
-                result = 31 * result + nameFrom.length
-                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
+                var result = nameFrom[0].code.toLong()
+                result = 31L * result + nameFrom[nameFrom.length - 1].code
+                result = 31L * result + nameFrom.length
+                return (result) * 10101L + nameFrom.hashCodeLong()
             }
         }
     }
@@ -239,13 +247,14 @@ sealed class MappingEntry constructor(
 
         companion object {
             inline fun hash(nameFrom: String, desc: String): Long {
-                var result = nameFrom[0].code
-                result = 31 * result + nameFrom.length
-                result = 31 * result + nameFrom[nameFrom.length - 1].code
-                result = 31 * result + desc[0].code
-                result = 31 * result + desc.length
-                result = 31 * result + desc[desc.length - 1].code
-                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
+                var a = nameFrom[0].code.toLong()
+                a = 31L * a + nameFrom.length
+                a = 31L * a + nameFrom[nameFrom.length - 1].code
+                var b = desc[0].code.toLong()
+                b = 31L * b + desc.length
+                b =  31L * b + desc[desc.length - 1].code
+                val c = 31L * nameFrom.hashCodeLong() + desc.hashCodeLong()
+                return (a * 0x10101 + b) * 0x10101 + c
             }
         }
     }
@@ -261,10 +270,10 @@ sealed class MappingEntry constructor(
         companion object {
             inline fun hash(nameFrom: String): Long {
                 if (nameFrom.isEmpty()) return 0L
-                var result = nameFrom[0].code
-                result = 31 * result + nameFrom[nameFrom.length - 1].code
-                result = 31 * result + nameFrom.length
-                return (result.toLong() shl 32) or nameFrom.hashCode().toLong()
+                var result = nameFrom[0].code.toLong()
+                result = 31L * result + nameFrom[nameFrom.length - 1].code
+                result = 31L * result + nameFrom.length
+                return result * 0x10101 + nameFrom.hashCodeLong()
             }
         }
     }
@@ -321,7 +330,6 @@ sealed class MappingEntry constructor(
     }
 }
 
-private val objectTypeDecsRegex = "(?<=L)[^;]+(?=;)".toRegex()
 
 fun ClassMapping.reversed(): ClassMapping {
     val result = MutableClassMapping()
@@ -335,10 +343,45 @@ fun ClassMapping.reversed(): ClassMapping {
         }
 
         c.methodMapping.backingMap.forEachFast { methodEntry ->
-            val desc = methodEntry.desc.replace(objectTypeDecsRegex) {
-                this.getNameTo(it.value) ?: it.value
-            }
-            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, desc, methodEntry.nameFrom))
+            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, this.remapDesc(methodEntry.desc), methodEntry.nameFrom))
+        }
+    }
+
+    return result.asImmutable()
+}
+
+private val objectTypeDecsRegex = "(?<=L)[^;]+(?=;)".toRegex()
+
+fun ClassMapping.remapDesc(desc: String): String {
+    return desc.replace(objectTypeDecsRegex) {
+        this.getNameTo(it.value) ?: it.value
+    }
+}
+
+fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
+    val result = MutableClassMapping()
+
+    this.backingMap.forEachFast { c ->
+        val otherClassEntry = other.get(c.nameTo)
+        val classEntry = MappingEntry.MutableClass(c.nameFrom, otherClassEntry?.nameTo ?: c.nameFrom)
+        result.add(classEntry)
+
+        c.fieldMapping.backingMap.forEachFast { fieldEntry ->
+            classEntry.fieldMapping.add(MappingEntry.Field(
+                fieldEntry.nameFrom,
+                otherClassEntry?.fieldMapping?.getNameTo(fieldEntry.nameTo) ?: fieldEntry.nameFrom
+            ))
+        }
+
+        c.methodMapping.backingMap.forEachFast { methodEntry ->
+            val desc = this.remapDesc(methodEntry.desc)
+            classEntry.methodMapping.add(
+                MappingEntry.Method(
+                    methodEntry.nameFrom,
+                    desc,
+                    otherClassEntry?.methodMapping?.getNameTo(methodEntry.nameTo, desc) ?: methodEntry.nameFrom
+                )
+            )
         }
     }
 

@@ -1,4 +1,4 @@
-package dev.fastmc.jartools.mapping
+package dev.fastmc.remapper.mapping
 
 import it.unimi.dsi.fastutil.HashCommon
 import it.unimi.dsi.fastutil.objects.ObjectIterator
@@ -118,9 +118,9 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
             } else {
                 throw RehashException
             }
+        } else {
+            assert(e == entry) { "Hash collision: $e, $entry" }
         }
-
-        assert(e != entry) { "Hash collision: $e, $entry" }
 
         return false
     }
@@ -156,9 +156,9 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
             } else {
                 rehash(1)
             }
+        } else {
+            assert(e == entry) { "Hash collision: $e, $entry" }
         }
-
-        assert(e != entry) { "Hash collision: $e, $entry" }
 
         return false
     }
