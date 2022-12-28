@@ -87,31 +87,19 @@ class MappingTest {
     }
 
     @Test
-    fun testObf2Srg() {
+    fun testObfSrg() {
         runBlocking {
             srgVersions.forEach {
                 launch(Dispatchers.Default) {
-                    MappingProvider.Obf2Searge.provide(it)
+                    MappingProvider.getObf2Srg(it)
+                    MappingProvider.getSrg2Obf(it)
                 }
             }
         }
     }
 
     @Test
-    fun testSrg2Obf() {
-        runBlocking {
-            srgVersions.forEach {
-                launch(Dispatchers.Default) {
-                    MappingProvider.getOrCompute(it, MappingName.Searge, MappingName.Obfuscated) {
-                        MappingProvider.Obf2Searge.provide(it).reversed()
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testSrg2Mcp() {
+    fun testSrgMcp() {
         runBlocking {
             srgVersions.forEach { mcVersion ->
                 if (mcVersion < McVersion("1.12.2")) return@forEach
@@ -127,7 +115,8 @@ class MappingTest {
                 map.values.forEach { versions ->
                     versions.take(5).forEach {
                         launch(Dispatchers.Default) {
-                            MappingProvider.Searge2Mcp.provide(mcVersion, it)
+                            MappingProvider.getSrg2Mcp(mcVersion, it)
+                            MappingProvider.getMcp2Srg(mcVersion, it)
                         }
                     }
                 }
@@ -136,26 +125,7 @@ class MappingTest {
     }
 
     @Test
-    fun testMcp2Srg() {
-        runBlocking {
-            srgVersions.forEach { mcVersion ->
-                val map = getMcpVersionMap(mcVersion) ?: return@forEach
-
-                map.values.forEach { versions ->
-                    versions.take(5).forEach {
-                        launch(Dispatchers.Default) {
-                            MappingProvider.getOrCompute(mcVersion, it, MappingName.Searge) {
-                                MappingProvider.Searge2Mcp.provide(mcVersion, it).reversed()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testObf2Mcp() {
+    fun testObfMcp() {
         runBlocking {
             srgVersions.forEach { mcVersion ->
                 val map = getMcpVersionMap(mcVersion) ?: return@forEach
@@ -164,22 +134,6 @@ class MappingTest {
                     versions.take(5).forEach {
                         launch(Dispatchers.Default) {
                             MappingProvider.getObf2Mcp(mcVersion, it)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testMcp2Obf() {
-        runBlocking {
-            srgVersions.forEach { mcVersion ->
-                val map = getMcpVersionMap(mcVersion) ?: return@forEach
-
-                map.values.forEach { versions ->
-                    versions.take(5).forEach {
-                        launch(Dispatchers.Default) {
                             MappingProvider.getMcp2Obf(mcVersion, it)
                         }
                     }
@@ -189,21 +143,11 @@ class MappingTest {
     }
 
     @Test
-    fun testObf2Intermediary() {
+    fun testObfIntermediary() {
         runBlocking {
             intermediaryVersions.forEach { mcVersion ->
                 launch(Dispatchers.Default) {
                     MappingProvider.getObf2Intermediary(mcVersion)
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testIntermediary2Obf() {
-        runBlocking {
-            intermediaryVersions.forEach { mcVersion ->
-                launch(Dispatchers.Default) {
                     MappingProvider.getIntermediary2Obf(mcVersion)
                 }
             }
@@ -211,10 +155,11 @@ class MappingTest {
     }
 
     @Test
-    fun testIntermediary2Yarn() {
+    fun testIntermediaryYarn() {
         runBlocking {
             yarnVersions.forEach { (mcVersion, versions) ->
                 launch(Dispatchers.Default) {
+                    MappingProvider.getIntermediary2Yarn(mcVersion, versions.last())
                     MappingProvider.getYarn2Intermediary(mcVersion, versions.last())
                 }
             }
@@ -222,32 +167,11 @@ class MappingTest {
     }
 
     @Test
-    fun testYarn2Intermediary() {
-        runBlocking {
-            yarnVersions.forEach { (mcVersion, versions) ->
-                launch(Dispatchers.Default) {
-                    MappingProvider.getYarn2Intermediary(mcVersion, versions.last())
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testObf2Yarn() {
+    fun testObfYarn() {
         runBlocking {
             yarnVersions.forEach { (mcVersion, versions) ->
                 launch(Dispatchers.Default) {
                     MappingProvider.getObf2Yarn(mcVersion, versions.last())
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testYarn2Obf() {
-        runBlocking {
-            yarnVersions.forEach { (mcVersion, versions) ->
-                launch(Dispatchers.Default) {
                     MappingProvider.getYarn2Obf(mcVersion, versions.last())
                 }
             }
@@ -255,23 +179,12 @@ class MappingTest {
     }
 
     @Test
-    fun testSrg2Intermediary() {
+    fun testSrgIntermediary() {
         runBlocking {
             intermediaryVersions.forEach { mcVersion ->
                 getMcpVersionMap(mcVersion) ?: return@forEach
                 launch(Dispatchers.Default) {
                     MappingProvider.getSrg2Intermediary(mcVersion)
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testIntermediary2Srg() {
-        runBlocking {
-            intermediaryVersions.forEach { mcVersion ->
-                getMcpVersionMap(mcVersion) ?: return@forEach
-                launch(Dispatchers.Default) {
                     MappingProvider.getIntermediary2Srg(mcVersion)
                 }
             }
@@ -279,7 +192,7 @@ class MappingTest {
     }
 
     @Test
-    fun testMcp2Intermediary() {
+    fun testMcpIntermediary() {
         runBlocking {
             intermediaryVersions.forEach { mcVersion ->
                 val map = getMcpVersionMap(mcVersion) ?: return@forEach
@@ -288,22 +201,6 @@ class MappingTest {
                     versions.take(5).forEach {
                         launch(Dispatchers.Default) {
                             MappingProvider.getMcp2Intermediary(mcVersion, it)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testIntermediary2Mcp() {
-        runBlocking {
-            intermediaryVersions.forEach { mcVersion ->
-                val map = getMcpVersionMap(mcVersion) ?: return@forEach
-
-                map.values.forEach { versions ->
-                    versions.take(5).forEach {
-                        launch(Dispatchers.Default) {
                             MappingProvider.getIntermediary2Mcp(mcVersion, it)
                         }
                     }
@@ -313,11 +210,12 @@ class MappingTest {
     }
 
     @Test
-    fun testYarn2Srg() {
+    fun testSrgYarn() {
         runBlocking {
             yarnVersions.forEach { (mcVersion, versions) ->
                 if (mcVersion !in srgVersions) return@forEach
                 launch(Dispatchers.Default) {
+                    MappingProvider.getSrg2Yarn(mcVersion, versions.last())
                     MappingProvider.getYarn2Srg(mcVersion, versions.last())
                 }
             }
@@ -325,37 +223,7 @@ class MappingTest {
     }
 
     @Test
-    fun testSrg2Yarn() {
-        runBlocking {
-            yarnVersions.forEach { (mcVersion, versions) ->
-                if (mcVersion !in srgVersions) return@forEach
-                launch(Dispatchers.Default) {
-                    MappingProvider.getSrg2Yarn(mcVersion, versions.last())
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testYarn2Mcp() {
-        runBlocking {
-            yarnVersions.forEach { (mcVersion, yarnVersions) ->
-                if (mcVersion !in srgVersions) return@forEach
-                val map = getMcpVersionMap(mcVersion) ?: return@forEach
-
-                map.values.forEach { versions ->
-                    versions.take(5).forEach {
-                        launch(Dispatchers.Default) {
-                            MappingProvider.getYarn2Mcp(mcVersion, yarnVersions.last(), it)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Test
-    fun testMcp2Yarn() {
+    fun testMcpYarn() {
         runBlocking {
             yarnVersions.forEach { (mcVersion, yarnVersions) ->
                 if (mcVersion !in srgVersions) return@forEach
@@ -365,6 +233,7 @@ class MappingTest {
                     versions.take(5).forEach {
                         launch(Dispatchers.Default) {
                             MappingProvider.getMcp2Yarn(mcVersion, it, yarnVersions.last())
+                            MappingProvider.getYarn2Mcp(mcVersion, yarnVersions.last(), it)
                         }
                     }
                 }
