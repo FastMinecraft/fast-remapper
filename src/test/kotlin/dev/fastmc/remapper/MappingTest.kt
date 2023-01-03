@@ -3,7 +3,6 @@ package dev.fastmc.remapper
 import com.google.gson.JsonParser
 import dev.fastmc.remapper.mapping.MappingName
 import dev.fastmc.remapper.mapping.MappingProvider
-import dev.fastmc.remapper.mapping.reversed
 import dev.fastmc.remapper.util.GlobalMavenCache
 import dev.fastmc.remapper.util.McVersion
 import kotlinx.coroutines.Dispatchers
