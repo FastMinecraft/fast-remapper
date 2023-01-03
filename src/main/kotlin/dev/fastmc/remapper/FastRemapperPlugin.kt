@@ -14,7 +14,7 @@ class FastRemapperPlugin : Plugin<Project> {
         }
 
         project.afterEvaluate {
-            extension.jarTaskNames.forEach {
+            extension.jarTaskNames.get().forEach {
                 val task = project.tasks.getByName(it)
                 val remapTask = project.tasks.create("fastRemap${task.name.capitalized()}", RemapJarTask::class.java, task)
                 remapTask.dependsOn(task)

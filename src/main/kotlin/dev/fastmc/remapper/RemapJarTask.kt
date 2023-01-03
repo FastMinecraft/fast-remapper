@@ -39,7 +39,7 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
         manifest.from(jarZipTree.map { zipTree -> zipTree.find { it.name == "MANIFEST.MF" }!! })
         manifest.attributes(
             mapOf(
-                "MixinConfigs" to extension.mixinConfigs.joinToString(", "),
+                "MixinConfigs" to extension.mixinConfigs.get().joinToString(", "),
             )
         )
     }
@@ -74,9 +74,9 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                 val projectMapping = extension.mapping.get()
                 val mapping = getMapping(projectMapping)
                 val refmapBaseName = outputFile.name.removeSuffix(".jar")
-                when (extension.type) {
+                when (extension.projectType.get()) {
                     FastRemapperExtension.ProjectType.FORGE -> {
-                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "searge", extension.mixinConfigs))
+                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "searge", extension.mixinConfigs.get().toList()))
                     }
                     FastRemapperExtension.ProjectType.FABRIC -> {
                         tasks.add(
@@ -84,9 +84,12 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                                 mapping,
                                 refmapBaseName,
                                 "named:intermediary",
-                                extension.mixinConfigs
+                                extension.mixinConfigs.get().toList()
                             )
                         )
+                    }
+                    else -> {
+                        throw IllegalArgumentException("Unknown project type: ${extension.projectType.get()}")
                     }
                 }
                 tasks.add(object : RemapStage() {
@@ -128,36 +131,36 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
 
         private fun CoroutineScope.getBaseMapping(projectMapping: MappingName): Deferred<ClassMapping> {
             return async {
-                when (extension.type) {
+                when (extension.projectType.get()) {
                     FastRemapperExtension.ProjectType.FORGE -> {
                         when (projectMapping) {
                             is MappingName.Mcp -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion,
+                                    extension.mcVersion.get(),
                                     projectMapping,
                                     MappingName.Searge
                                 ) {
                                     MappingProvider.Searge2Mcp.provide(
-                                        extension.mcVersion,
+                                        extension.mcVersion.get(),
                                         projectMapping
                                     ).reversed()
                                 }
                             }
                             is MappingName.Yarn -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion,
+                                    extension.mcVersion.get(),
                                     projectMapping,
                                     MappingName.Searge
                                 ) {
                                     MappingProvider.YarnIntermediary2Yarn.provide(
-                                        extension.mcVersion,
+                                        extension.mcVersion.get(),
                                         projectMapping
                                     ).reversed().mapWith(
                                         MappingProvider.Obf2YarnIntermediary.provide(
-                                            extension.mcVersion
+                                            extension.mcVersion.get()
                                         ).reversed()
                                     ).mapWith(
-                                        MappingProvider.Obf2Searge.provide(extension.mcVersion)
+                                        MappingProvider.Obf2Searge.provide(extension.mcVersion.get())
                                     )
                                 }
                             }
@@ -168,29 +171,29 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                         when (projectMapping) {
                             is MappingName.Yarn -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion,
+                                    extension.mcVersion.get(),
                                     projectMapping,
                                     MappingName.YarnIntermediary
                                 ) {
                                     MappingProvider.YarnIntermediary2Yarn.provide(
-                                        extension.mcVersion,
+                                        extension.mcVersion.get(),
                                         projectMapping
                                     ).reversed()
                                 }
                             }
                             is MappingName.Mcp -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion,
+                                    extension.mcVersion.get(),
                                     projectMapping,
                                     MappingName.YarnIntermediary
                                 ) {
                                     MappingProvider.Searge2Mcp.provide(
-                                        extension.mcVersion,
+                                        extension.mcVersion.get(),
                                         projectMapping
                                     ).reversed().mapWith(
-                                        MappingProvider.Obf2Searge.provide(extension.mcVersion).reversed()
+                                        MappingProvider.Obf2Searge.provide(extension.mcVersion.get()).reversed()
                                     ).mapWith(
-                                        MappingProvider.Obf2YarnIntermediary.provide(extension.mcVersion)
+                                        MappingProvider.Obf2YarnIntermediary.provide(extension.mcVersion.get())
                                     )
                                 }
                             }

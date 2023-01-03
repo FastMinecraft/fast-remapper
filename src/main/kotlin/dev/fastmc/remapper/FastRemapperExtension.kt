@@ -2,11 +2,12 @@ package dev.fastmc.remapper
 
 import dev.fastmc.remapper.mapping.MappingName
 import dev.fastmc.remapper.util.McVersion
-import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
+import org.gradle.api.provider.SetProperty
 import org.gradle.jvm.tasks.Jar
 import java.io.File
 import javax.inject.Inject
@@ -22,61 +23,64 @@ abstract class FastRemapperExtension {
     abstract val mapping: Property<MappingName>
     abstract val minecraftJar: RegularFileProperty
 
-    var mcVersion = McVersion.UNKNOWN; private set
-    lateinit var type: ProjectType; private set
-    private val mixinConfigs0 = ObjectArrayList<String>()
-    private val jarTaskNames0 = ObjectArrayList<String>()
+    abstract val mixinConfigs: SetProperty<String>
+    abstract val jarTaskNames: SetProperty<String>
 
-    val mixinConfigs: List<String> get() = mixinConfigs0
-    val jarTaskNames: List<String> get() = jarTaskNames0
-    val minecraftJarZipTree = project.zipTree(minecraftJar)
+    abstract val mcVersion: Property<McVersion>
+    abstract val projectType: Property<ProjectType>
+
+    internal val minecraftJarZipTree = project.zipTree(minecraftJar)
+
+    init {
+        mcVersion.convention(McVersion.UNKNOWN)
+    }
 
     fun mcVersion(version: String) {
-        mcVersion = McVersion(version)
+        mcVersion.set(McVersion(version))
     }
 
     fun mcVersion(version: McVersion) {
-        mcVersion = version
+        mcVersion.set(version)
     }
 
     fun forge() {
-        type = ProjectType.FORGE
+        projectType.set(ProjectType.FORGE)
     }
 
     fun fabric() {
-        type = ProjectType.FABRIC
+        projectType.set(ProjectType.FABRIC)
     }
 
     fun mixin(config: String) {
-        mixinConfigs0.add(config)
+        mixinConfigs.add(config)
     }
 
     fun mixin(vararg configs: String) {
-        mixinConfigs0.addAll(configs)
+        mixinConfigs.addAll(*configs)
     }
 
     fun remap(jarTaskName: String) {
-        jarTaskNames0.add(jarTaskName)
+        jarTaskNames.add(jarTaskName)
     }
 
     fun remap(vararg jarTaskNames: String) {
-        this.jarTaskNames0.addAll(jarTaskNames)
+        this.jarTaskNames.addAll(*jarTaskNames)
     }
 
     fun remap(jarTask: Jar) {
-        jarTaskNames0.add(jarTask.name)
+        jarTaskNames.add(jarTask.name)
     }
 
     fun remap(vararg jarTasks: Jar) {
-        this.jarTaskNames0.addAll(jarTasks.map { it.name })
+        this.jarTaskNames.addAll(jarTasks.map { it.name })
     }
 
     fun remap(jarTask: Provider<out Jar>) {
-        jarTaskNames0.add(jarTask.get().name)
+        jarTaskNames.add(jarTask.get().name)
     }
 
     fun remap(vararg jarTasks: Provider<out Jar>) {
-        this.jarTaskNames0.addAll(jarTasks.map { it.get().name })
+        this.jarTaskNames.addAll(jarTasks.map { it.get().name })
     }
 
     enum class ProjectType {
