@@ -162,10 +162,12 @@ class GenerateRefmapStage(
             val newClassNode = ClassNode()
             classNode.accept(newClassNode)
             val newMixinAnnotation = newClassNode.findMixinAnnotation()!!
-            for (i in 0 until newMixinAnnotation.values.size) {
-                when (newMixinAnnotation.values[i]) {
-                    "value" -> newMixinAnnotation.values[i + 1] = newValue
-                    "targets" -> newMixinAnnotation.values[i + 1] = newTargets
+            newMixinAnnotation.values?.let {
+                for (i in 0 until it.size) {
+                    when (it[i]) {
+                        "value" -> it[i + 1] = newValue
+                        "targets" -> it[i + 1] = newTargets
+                    }
                 }
             }
             synchronized(result) {
@@ -384,12 +386,14 @@ class GenerateRefmapStage(
         classRefmap: Object2ObjectOpenHashMap<String, String>
     ) {
         classNode.methods.asSequence().forEach method@{ methodNode ->
-            methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Invoker;")?.let {
+            methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Invoker;")?.let { annotationNode ->
                 var nameFrom: String? = null
-                for (i in 0 until it.values.size step 2) {
-                    when (it.values[i] as String) {
-                        "value" -> {
-                            nameFrom = it.values[i + 1] as String
+                annotationNode.values?.let {
+                    for (i in 0 until it.size step 2) {
+                        when (it[i] as String) {
+                            "value" -> {
+                                nameFrom = it[i + 1] as String
+                            }
                         }
                     }
                 }
@@ -407,8 +411,7 @@ class GenerateRefmapStage(
                     }
                 }
                 val descFrom = methodNode.desc
-                val nameTo =
-                    classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom) ?: return@method
+                val nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom!!, descFrom) ?: return@method
                 val descTo = mapping.remapDesc(descFrom)
                 classRefmap[nameFrom] = "$nameTo$descTo"
             } ?: methodNode.annotations.findAnnotation("Lorg/spongepowered/asm/mixin/gen/Accessor;")
