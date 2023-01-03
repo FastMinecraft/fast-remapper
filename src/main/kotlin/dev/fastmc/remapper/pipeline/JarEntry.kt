@@ -20,7 +20,7 @@ class ClassEntry(fileName: String, bytes: ByteArray, val parseOptions: Int = 0) 
 
     val classReader by lazy { ClassReader(bytes) }
     val classNode by lazy { ClassNode().apply { classNode0.accept(this) } }
-    val className get() = classNode0.name
+    val className get() = classNode0.name!!
 
     override fun update(newBytes: ByteArray): ClassEntry {
         return ClassEntry(
@@ -59,7 +59,7 @@ inline fun <T : JarEntry> MutableMap<String, T>.put(entry: T) {
     this[entry.fileName] = entry
 }
 
-inline fun <reified T: JarEntry> Map<String, JarEntry>.filterValueType(): Object2ObjectOpenHashMap<String, T> {
+inline fun <reified T : JarEntry> Map<String, JarEntry>.filterValueType(): Object2ObjectOpenHashMap<String, T> {
     val result = Object2ObjectOpenHashMap<String, T>()
     this.values.forEach {
         if (it is T) {

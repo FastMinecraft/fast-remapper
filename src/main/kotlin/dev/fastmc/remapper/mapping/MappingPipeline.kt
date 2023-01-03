@@ -1,3 +1,5 @@
+@file:Suppress("DuplicatedCode")
+
 package dev.fastmc.remapper.mapping
 
 import dev.fastmc.asmkt.visit
@@ -69,7 +71,7 @@ class SubclassMappingPipeline(private val externalClasses: Deferred<Collection<C
     }
 }
 
-class MixinMappingPipeline() : MappingPipeline {
+class MixinMappingPipeline : MappingPipeline {
     override suspend fun get(prev: Deferred<ClassMapping>?, classEntries: Collection<ClassEntry>): ClassMapping {
         require(prev != null) { "MixinMappingPipeline requires a previous mapping" }
         return coroutineScope {
@@ -106,9 +108,9 @@ class MixinMappingPipeline() : MappingPipeline {
                             }
                         }
                     }
-                    visitArray<String>("targets") { v ->
+                    visitArray("targets") { v ->
                         v.forEach { target ->
-                            prevMapping.get(target)?.let {
+                            prevMapping[target]?.let {
                                 var set: MappingEntry.MutableClass? = null
                                 it.methodMapping.backingMap.forEachFast {
                                     if (set == null) {

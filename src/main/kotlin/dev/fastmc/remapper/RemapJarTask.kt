@@ -58,7 +58,11 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
             }
             val minecraftClasses = async(Dispatchers.IO) {
                 minecraftClassFiles.map { (path, file) ->
-                    ClassEntry(path, file.readBytes(), ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
+                    ClassEntry(
+                        path,
+                        file.readBytes(),
+                        ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES
+                    )
                 }
             }
             return SequenceMappingPipeline(
@@ -76,7 +80,14 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                 val refmapBaseName = outputFile.name.removeSuffix(".jar")
                 when (extension.projectType.get()) {
                     FastRemapperExtension.ProjectType.FORGE -> {
-                        tasks.add(GenerateRefmapStage(mapping, refmapBaseName, "searge", extension.mixinConfigs.get().toList()))
+                        tasks.add(
+                            GenerateRefmapStage(
+                                mapping,
+                                refmapBaseName,
+                                "searge",
+                                extension.mixinConfigs.get().toList()
+                            )
+                        )
                     }
                     FastRemapperExtension.ProjectType.FABRIC -> {
                         tasks.add(
@@ -200,6 +211,7 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                             else -> throw IllegalArgumentException("Unsupported mapping for fabric project: $projectMapping")
                         }
                     }
+                    else -> throw IllegalArgumentException("Unknown project type: ${extension.projectType.get()}")
                 }
             }
         }

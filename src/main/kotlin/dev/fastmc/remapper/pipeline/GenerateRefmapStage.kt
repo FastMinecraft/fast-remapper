@@ -327,9 +327,9 @@ class GenerateRefmapStage(
         var nameTo: String?
 
         if (nameFrom == "<init>") {
-            nameTo =   nameFrom
+            nameTo = nameFrom
         } else {
-            nameTo =   classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
+            nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
             if (nameTo == null && descFrom.startsWith("()")) {
                 val returnType = descFrom.substring(2)
                 val candidates = classMappingEntry.methodMapping.backingMap.filter {

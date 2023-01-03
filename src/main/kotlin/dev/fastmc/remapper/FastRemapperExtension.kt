@@ -4,7 +4,6 @@ import dev.fastmc.remapper.mapping.MappingName
 import dev.fastmc.remapper.util.McVersion
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.Provider
 import org.gradle.api.provider.SetProperty

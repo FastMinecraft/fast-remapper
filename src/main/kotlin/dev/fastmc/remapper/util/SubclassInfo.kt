@@ -7,7 +7,7 @@ class SubclassInfo private constructor(val classNode: ClassNode) {
     val subclasses = mutableListOf<SubclassInfo>()
 
     override fun toString(): String {
-        return "${classNode.name}(depth=$depth, subclasses=${subclasses.joinToString {it.classNode.name}})"
+        return "${classNode.name}(depth=$depth, subclasses=${subclasses.joinToString { it.classNode.name }})"
     }
 
     companion object {

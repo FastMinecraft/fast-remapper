@@ -252,7 +252,7 @@ sealed class MappingEntry constructor(
                 a = 31L * a + nameFrom[nameFrom.length - 1].code
                 var b = desc[0].code.toLong()
                 b = 31L * b + desc.length
-                b =  31L * b + desc[desc.length - 1].code
+                b = 31L * b + desc[desc.length - 1].code
                 val c = 31L * nameFrom.hashCodeLong() + desc.hashCodeLong()
                 return (a * 0x10101 + b) * 0x10101 + c
             }
@@ -343,7 +343,13 @@ fun ClassMapping.reversed(): ClassMapping {
         }
 
         c.methodMapping.backingMap.forEachFast { methodEntry ->
-            classEntry.methodMapping.add(MappingEntry.Method(methodEntry.nameTo, this.remapDesc(methodEntry.desc), methodEntry.nameFrom))
+            classEntry.methodMapping.add(
+                MappingEntry.Method(
+                    methodEntry.nameTo,
+                    this.remapDesc(methodEntry.desc),
+                    methodEntry.nameFrom
+                )
+            )
         }
     }
 
@@ -367,10 +373,12 @@ fun ClassMapping.mapWith(other: ClassMapping): ClassMapping {
         result.add(classEntry)
 
         c.fieldMapping.backingMap.forEachFast { fieldEntry ->
-            classEntry.fieldMapping.add(MappingEntry.Field(
-                fieldEntry.nameFrom,
-                otherClassEntry?.fieldMapping?.getNameTo(fieldEntry.nameTo) ?: fieldEntry.nameFrom
-            ))
+            classEntry.fieldMapping.add(
+                MappingEntry.Field(
+                    fieldEntry.nameFrom,
+                    otherClassEntry?.fieldMapping?.getNameTo(fieldEntry.nameTo) ?: fieldEntry.nameFrom
+                )
+            )
         }
 
         c.methodMapping.backingMap.forEachFast { methodEntry ->

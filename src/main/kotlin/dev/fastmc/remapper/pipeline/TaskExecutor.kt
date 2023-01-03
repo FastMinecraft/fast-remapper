@@ -2,8 +2,11 @@ package dev.fastmc.remapper.pipeline
 
 import dev.fastmc.remapper.util.JarUtils
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
 
 interface TaskExecutor {

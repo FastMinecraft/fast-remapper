@@ -164,7 +164,7 @@ sealed interface MappingProvider<T : MappingName> {
 
     companion object {
         val cacheDir = File(Shared.globalCacheDir, "mappings").also { it.mkdirs() }
-        val locks = Object2ObjectMaps.synchronize(Object2ObjectOpenHashMap<String, Mutex>())
+        val locks = Object2ObjectMaps.synchronize(Object2ObjectOpenHashMap<String, Mutex>())!!
 
         fun getFile(mcVersion: McVersion, from: MappingName, to: MappingName): File {
             return File(cacheDir, "$mcVersion-$from-$to.mapping")

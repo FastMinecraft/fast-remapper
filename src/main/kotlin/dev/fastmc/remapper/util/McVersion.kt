@@ -2,7 +2,7 @@ package dev.fastmc.remapper.util
 
 @JvmInline
 value class McVersion private constructor(private val packed: Int) : Comparable<McVersion> {
-    constructor(major: Int, minor: Int): this(major, minor, 0)
+    constructor(major: Int, minor: Int) : this(major, minor, 0)
 
     constructor(major: Int, minor: Int, patch: Int) : this((major shl 16) or (minor shl 8) or (patch))
 
