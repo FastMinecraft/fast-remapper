@@ -217,50 +217,63 @@ class GenerateRefmapStage(
 
             if (remappingMethod) {
                 methods.forEach method@{ methodRef ->
-                    val match = methodRefRegex.matchEntire(methodRef)
-                    if (match != null) {
-                        val nameFrom = match.groupValues[1]
-                        val descFrom = match.groupValues[2]
+                    if (isInitMethod(methodRef)) {
                         mapMethodRef(
                             mapping,
                             targetClass,
                             classMappingEntry,
                             classRefmap,
                             methodRef,
-                            nameFrom,
-                            descFrom
-                        )
-                    } else if (wildcardMethodRefRegex.matches(methodRef) || annotationNode.desc == "Lorg/spongepowered/asm/mixin/injection/Inject;") {
-                        if (annotationNode.desc != "Lorg/spongepowered/asm/mixin/injection/Inject;") {
-                            throw IllegalStateException("Wildcard method reference is only allowed for @Inject")
-                        }
-                        val descFrom = findDesc(method)
-                            ?: throw IllegalStateException("Cannot find desc for method ${method.name} at $targetClass")
-                        val nameFrom = methodRef.removeSuffix("*")
-                        mapMethodRef(
-                            mapping,
-                            targetClass,
-                            classMappingEntry,
-                            classRefmap,
                             methodRef,
-                            nameFrom,
-                            descFrom
+                            ""
                         )
                     } else {
-                        val toFind = methodRef.removeSuffix("*")
-                        val methodEntry = classMappingEntry.methodMapping.backingMap.find {
-                            it.nameFrom == toFind
-                        } ?: throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
-                        val descFrom = methodEntry.desc
-                        mapMethodRef(
-                            mapping,
-                            targetClass,
-                            classMappingEntry,
-                            classRefmap,
-                            methodRef,
-                            methodEntry.nameFrom,
-                            descFrom
-                        )
+                        val match = methodRefRegex.matchEntire(methodRef)
+                        if (match != null) {
+                            val nameFrom = match.groupValues[1]
+                            val descFrom = match.groupValues[2]
+                            mapMethodRef(
+                                mapping,
+                                targetClass,
+                                classMappingEntry,
+                                classRefmap,
+                                methodRef,
+                                nameFrom,
+                                descFrom
+                            )
+                        } else if (wildcardMethodRefRegex.matches(methodRef) || annotationNode.desc == "Lorg/spongepowered/asm/mixin/injection/Inject;") {
+                            if (annotationNode.desc != "Lorg/spongepowered/asm/mixin/injection/Inject;") {
+                                throw IllegalStateException("Wildcard method reference is only allowed for @Inject")
+                            }
+                            val descFrom = findDesc(method)
+                                ?: throw IllegalStateException("Cannot find desc for method ${method.name} at $targetClass")
+                            val nameFrom = methodRef.removeSuffix("*")
+                            mapMethodRef(
+                                mapping,
+                                targetClass,
+                                classMappingEntry,
+                                classRefmap,
+                                methodRef,
+                                nameFrom,
+                                descFrom
+                            )
+                        } else {
+                            val toFind = methodRef.removeSuffix("*")
+                            val methodEntry = classMappingEntry.methodMapping.backingMap.find {
+                                it.nameFrom == toFind
+                            }
+                                ?: throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+                            val descFrom = methodEntry.desc
+                            mapMethodRef(
+                                mapping,
+                                targetClass,
+                                classMappingEntry,
+                                classRefmap,
+                                methodRef,
+                                methodEntry.nameFrom,
+                                descFrom
+                            )
+                        }
                     }
                 }
             }
@@ -326,7 +339,7 @@ class GenerateRefmapStage(
         var descFrom = descFrom0
         var nameTo: String?
 
-        if (nameFrom == "<init>") {
+        if (isInitMethod(nameFrom)) {
             nameTo = nameFrom
         } else {
             nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom, descFrom)
@@ -362,6 +375,8 @@ class GenerateRefmapStage(
         val descTo = mapping.remapDesc(descFrom)
         classRefmap[methodRef] = "L${classMappingEntry.nameTo};$nameTo$descTo"
     }
+
+    private fun isInitMethod(nameFrom: String) = nameFrom == "<init>" || nameFrom == "<clinit>"
 
     private fun mapToPrimitive(desc: String): String {
         return desc.replace(javaLangRegex) {
@@ -409,6 +424,7 @@ class GenerateRefmapStage(
                             throw IllegalStateException("Cannot find name for invoker ${methodNode.name}")
                         }
                     }
+                    nameFrom = nameFrom!!.replaceFirstChar(Char::lowercaseChar)
                 }
                 val descFrom = methodNode.desc
                 val nameTo = classMappingEntry.methodMapping.getNameTo(nameFrom!!, descFrom) ?: return@method
