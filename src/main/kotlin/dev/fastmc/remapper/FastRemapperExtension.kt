@@ -64,19 +64,19 @@ abstract class FastRemapperExtension {
     }
     
     fun register(jarTaskName: String): TaskProvider<RemapJarTask> {
-        return project.tasks.register("remap${jarTaskName.capitalized()}", RemapJarTask::class.java)  {
+        return project.tasks.register("fastRemap${jarTaskName.capitalized()}", RemapJarTask::class.java)  {
             it.setup(this, project.provider { project.tasks.named(jarTaskName, Jar::class.java) }.flatten())
         }
     }
 
     fun register(jarTask: Jar): TaskProvider<RemapJarTask> {
-        return project.tasks.register("remap${jarTask.name.capitalized()}", RemapJarTask::class.java) {
+        return project.tasks.register("fastRemap${jarTask.name.capitalized()}", RemapJarTask::class.java) {
             it.setup(this, jarTask)
         }
     }
 
     fun register(jarTask: NamedDomainObjectProvider<out Jar>): TaskProvider<RemapJarTask> {
-        return project.tasks.register("remap${jarTask.name.capitalized()}", RemapJarTask::class.java) {
+        return project.tasks.register("fastRemap${jarTask.name.capitalized()}", RemapJarTask::class.java) {
             it.setup(this, jarTask)
         }
     }
