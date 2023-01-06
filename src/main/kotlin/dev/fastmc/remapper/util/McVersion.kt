@@ -1,7 +1,9 @@
 package dev.fastmc.remapper.util
 
+import java.io.Serializable
+
 @JvmInline
-value class McVersion private constructor(private val packed: Int) : Comparable<McVersion> {
+value class McVersion private constructor(private val packed: Int) : Comparable<McVersion>, Serializable {
     constructor(major: Int, minor: Int) : this(major, minor, 0)
 
     constructor(major: Int, minor: Int, patch: Int) : this((major shl 16) or (minor shl 8) or (patch))

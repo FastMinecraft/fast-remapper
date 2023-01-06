@@ -1,6 +1,8 @@
 package dev.fastmc.remapper.mapping
 
-sealed class MappingName(val type: MappingType) : Comparable<MappingName> {
+import java.io.Serializable
+
+sealed class MappingName(@Transient val type: MappingType) : Comparable<MappingName>, Serializable {
     abstract val identifier: String
 
     final override fun toString(): String {

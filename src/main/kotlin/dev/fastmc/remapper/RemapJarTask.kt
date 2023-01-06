@@ -3,26 +3,72 @@ package dev.fastmc.remapper
 import dev.fastmc.remapper.mapping.*
 import dev.fastmc.remapper.pipeline.*
 import dev.fastmc.remapper.util.JarUtils
+import dev.fastmc.remapper.util.McVersion
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import org.gradle.api.file.FileTree
 import org.gradle.api.internal.file.copy.CopyAction
 import org.gradle.api.internal.file.copy.CopyActionProcessingStream
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.provider.SetProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.WorkResult
 import org.gradle.api.tasks.WorkResults
 import org.gradle.jvm.tasks.Jar
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.commons.Remapper
 import java.io.File
-import javax.inject.Inject
 
-@Suppress("LeakingThis")
-abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
-    private val extension = project.extensions.getByType(FastRemapperExtension::class.java)
+abstract class RemapJarTask : Jar() {
+    @get:Input
+    internal abstract val projectType: Property<FastRemapperExtension.ProjectType>
+    
+    @get:Input
+    internal abstract val mcVersion: Property<McVersion>
+    
+    @get:Input
+    internal abstract val mapping: Property<MappingName>
 
-    init {
+    @get:InputFiles
+    internal abstract val minecraftJarZipTree: Property<FileTree>
+    
+    @get:Input
+    internal abstract val mixinConfigs: SetProperty<String>
+
+    internal fun setup(extension: FastRemapperExtension, jarTask: Provider<out Jar>) {
+        setup(extension)
+        dependsOn(jarTask)
+
+        destinationDirectory.set(jarTask.flatMap { it.destinationDirectory })
+        archiveBaseName.set(jarTask.flatMap { it.archiveBaseName })
+        archiveAppendix.set(jarTask.flatMap { it.archiveAppendix })
+        archiveVersion.set(jarTask.flatMap { it.archiveVersion })
+        archiveClassifier.set("remapped")
+        archiveExtension.set("jar")
+
+        val jarZipTree = project.provider {
+            project.zipTree(jarTask.flatMap { it.archiveFile })
+        }
+
+        from(jarZipTree)
+
+        manifest.from(jarZipTree.map { zipTree -> zipTree.find { it.name == "MANIFEST.MF" }!! })
+        manifest.attributes(
+            mapOf(
+                "MixinConfigs" to mixinConfigs.get().joinToString(", "),
+            )
+        )
+    }
+
+    internal fun setup(extension: FastRemapperExtension, jarTask: Jar) {
+        setup(extension)
+        dependsOn(jarTask)
+
         destinationDirectory.set(jarTask.destinationDirectory)
         archiveBaseName.set(jarTask.archiveBaseName)
         archiveAppendix.set(jarTask.archiveAppendix)
@@ -39,19 +85,35 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
         manifest.from(jarZipTree.map { zipTree -> zipTree.find { it.name == "MANIFEST.MF" }!! })
         manifest.attributes(
             mapOf(
-                "MixinConfigs" to extension.mixinConfigs.get().joinToString(", "),
+                "MixinConfigs" to mixinConfigs.get().joinToString(", "),
             )
         )
     }
 
-    override fun createCopyAction(): CopyAction {
-        return RemapJarAction(extension, archiveFile.get().asFile)
+    private fun setup(extension: FastRemapperExtension) {
+            projectType.set(extension.projectType)
+            mcVersion.set(extension.mcVersion)
+            mapping.set(extension.mapping)
+            minecraftJarZipTree.set(extension.minecraftJarZipTree)
+            mixinConfigs.set(extension.mixinConfigs)
     }
 
-    class RemapJarAction(private val extension: FastRemapperExtension, private val outputFile: File) : CopyAction {
+    override fun createCopyAction(): CopyAction {
+        return RemapJarAction(this)
+    }
+
+    class RemapJarAction(task: RemapJarTask) : CopyAction {
+        private val projectType = task.projectType.get()
+        private val mcVersion = task.mcVersion.get()
+        private val mapping = task.mapping.get()
+        private val minecraftJarZipTree = task.minecraftJarZipTree.get()
+        private val mixinConfigs = task.mixinConfigs.get().toList()
+        private val outputFile = task.archiveFile.get().asFile
+        
+        
         private fun CoroutineScope.getMapping(projectMapping: MappingName): MappingPipeline {
             val minecraftClassFiles = ObjectArrayList<Pair<String, File>>()
-            extension.minecraftJarZipTree.visit {
+            minecraftJarZipTree.visit {
                 if (it.isDirectory) return@visit
                 if (!it.name.endsWith(".class")) return@visit
                 minecraftClassFiles.add(it.relativePath.pathString to it.file)
@@ -75,17 +137,16 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
         override fun execute(stream: CopyActionProcessingStream): WorkResult {
             runBlocking {
                 val tasks = ObjectArrayList<Stage>()
-                val projectMapping = extension.mapping.get()
-                val mapping = getMapping(projectMapping)
+                val mapping = getMapping(mapping)
                 val refmapBaseName = outputFile.name.removeSuffix(".jar")
-                when (extension.projectType.get()) {
+                when (projectType) {
                     FastRemapperExtension.ProjectType.FORGE -> {
                         tasks.add(
                             GenerateRefmapStage(
                                 mapping,
                                 refmapBaseName,
                                 "searge",
-                                extension.mixinConfigs.get().toList()
+                                mixinConfigs.toList()
                             )
                         )
                     }
@@ -95,12 +156,12 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                                 mapping,
                                 refmapBaseName,
                                 "named:intermediary",
-                                extension.mixinConfigs.get().toList()
+                                mixinConfigs.toList()
                             )
                         )
                     }
                     else -> {
-                        throw IllegalArgumentException("Unknown project type: ${extension.projectType.get()}")
+                        throw IllegalArgumentException("Unknown project type: $projectType")
                     }
                 }
                 tasks.add(object : RemapStage() {
@@ -142,37 +203,27 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
 
         private fun CoroutineScope.getBaseMapping(projectMapping: MappingName): Deferred<ClassMapping> {
             return async {
-                when (extension.projectType.get()) {
+                when (projectType) {
                     FastRemapperExtension.ProjectType.FORGE -> {
                         when (projectMapping) {
                             is MappingName.Mcp -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion.get(),
+                                    mcVersion,
                                     projectMapping,
                                     MappingName.Searge
                                 ) {
-                                    MappingProvider.Searge2Mcp.provide(
-                                        extension.mcVersion.get(),
-                                        projectMapping
-                                    ).reversed()
+                                    MappingProvider.Searge2Mcp.provide(mcVersion, projectMapping).reversed()
                                 }
                             }
                             is MappingName.Yarn -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion.get(),
+                                    mcVersion,
                                     projectMapping,
                                     MappingName.Searge
                                 ) {
-                                    MappingProvider.YarnIntermediary2Yarn.provide(
-                                        extension.mcVersion.get(),
-                                        projectMapping
-                                    ).reversed().mapWith(
-                                        MappingProvider.Obf2YarnIntermediary.provide(
-                                            extension.mcVersion.get()
-                                        ).reversed()
-                                    ).mapWith(
-                                        MappingProvider.Obf2Searge.provide(extension.mcVersion.get())
-                                    )
+                                    MappingProvider.YarnIntermediary2Yarn.provide(mcVersion, projectMapping).reversed()
+                                        .mapWith(MappingProvider.Obf2YarnIntermediary.provide(mcVersion).reversed())
+                                        .mapWith(MappingProvider.Obf2Searge.provide(mcVersion))
                                 }
                             }
                             else -> throw IllegalArgumentException("Unsupported mapping for forge project: $projectMapping")
@@ -182,36 +233,28 @@ abstract class RemapJarTask @Inject constructor(jarTask: Jar) : Jar() {
                         when (projectMapping) {
                             is MappingName.Yarn -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion.get(),
+                                    mcVersion,
                                     projectMapping,
                                     MappingName.YarnIntermediary
                                 ) {
-                                    MappingProvider.YarnIntermediary2Yarn.provide(
-                                        extension.mcVersion.get(),
-                                        projectMapping
-                                    ).reversed()
+                                    MappingProvider.YarnIntermediary2Yarn.provide(mcVersion, projectMapping).reversed()
                                 }
                             }
                             is MappingName.Mcp -> {
                                 MappingProvider.getOrCompute(
-                                    extension.mcVersion.get(),
+                                    mcVersion,
                                     projectMapping,
                                     MappingName.YarnIntermediary
                                 ) {
-                                    MappingProvider.Searge2Mcp.provide(
-                                        extension.mcVersion.get(),
-                                        projectMapping
-                                    ).reversed().mapWith(
-                                        MappingProvider.Obf2Searge.provide(extension.mcVersion.get()).reversed()
-                                    ).mapWith(
-                                        MappingProvider.Obf2YarnIntermediary.provide(extension.mcVersion.get())
-                                    )
+                                    MappingProvider.Searge2Mcp.provide(mcVersion, projectMapping).reversed()
+                                        .mapWith(MappingProvider.Obf2Searge.provide(mcVersion).reversed())
+                                        .mapWith(MappingProvider.Obf2YarnIntermediary.provide(mcVersion))
                                 }
                             }
                             else -> throw IllegalArgumentException("Unsupported mapping for fabric project: $projectMapping")
                         }
                     }
-                    else -> throw IllegalArgumentException("Unknown project type: ${extension.projectType.get()}")
+                    else -> throw IllegalArgumentException("Unknown project type: $projectType")
                 }
             }
         }

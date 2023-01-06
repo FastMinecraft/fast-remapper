@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "dev.fastmc"
-version = "1.0-SNAPSHOT"
+version = "1.1-SNAPSHOT"
 
 plugins {
     kotlin("jvm")
