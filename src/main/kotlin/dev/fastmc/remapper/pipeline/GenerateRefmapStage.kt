@@ -261,8 +261,7 @@ class GenerateRefmapStage(
                             val toFind = methodRef.removeSuffix("*")
                             val methodEntry = classMappingEntry.methodMapping.backingMap.find {
                                 it.nameFrom == toFind
-                            }
-                                ?: throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+                            } ?: throw cannotFindMappingForMethodException(methodRef, targetClass)
                             val descFrom = methodEntry.desc
                             mapMethodRef(
                                 mapping,
@@ -292,6 +291,7 @@ class GenerateRefmapStage(
                             ?: throw IllegalStateException("Cannot find mapping for target class $ownerFrom at $targetClass")
                         val ownerTo = targetEntry.nameTo
                         val nameTo = targetEntry.methodMapping.getNameTo(nameFrom, descFrom)
+                            ?: throw cannotFindMappingForMethodException("$nameFrom$descFrom", targetClass)
                         val descTo = mapping.remapDesc(descFrom)
                         classRefmap[ref] = "L$ownerTo;$nameTo$descTo"
                     } ?: fullFieldRefRegex.matchEntire(ref)?.let {
@@ -302,8 +302,8 @@ class GenerateRefmapStage(
                         val targetEntry = mapping[ownerFrom]
                             ?: throw IllegalStateException("Cannot find mapping for target class $ownerFrom at $targetClass")
                         val ownerTo = targetEntry.nameTo
-                        val nameTo =
-                            targetEntry.fieldMapping.getNameTo(nameFrom)
+                        val nameTo = targetEntry.fieldMapping.getNameTo(nameFrom)
+                            ?: throw cannotFindMappingForFieldException(nameFrom, targetClass)
                         val descTo = mapping.remapDesc(descFrom)
                         classRefmap[ref] = "L$ownerTo;$nameTo:$descTo"
                     } ?: run {
@@ -370,10 +370,18 @@ class GenerateRefmapStage(
             }
         }
         if (nameTo == null) {
-            throw IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+            throw cannotFindMappingForMethodException(methodRef, targetClass)
         }
         val descTo = mapping.remapDesc(descFrom)
         classRefmap[methodRef] = "L${classMappingEntry.nameTo};$nameTo$descTo"
+    }
+
+    private fun cannotFindMappingForMethodException(methodRef: String, targetClass: String): IllegalStateException {
+        return IllegalStateException("Cannot find mapping for method $methodRef in $targetClass")
+    }
+
+    private fun cannotFindMappingForFieldException(fieldRef: String, targetClass: String): IllegalStateException {
+        return IllegalStateException("Cannot find mapping for field $fieldRef in $targetClass")
     }
 
     private fun isInitMethod(nameFrom: String) = nameFrom == "<init>" || nameFrom == "<clinit>"
