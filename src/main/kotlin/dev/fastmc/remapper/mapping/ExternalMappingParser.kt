@@ -62,6 +62,7 @@ enum class ExternalMappingParser {
             val result: MutableClassMapping = MutableClassMapping()
             var lastClassEntry: MappingEntry.MutableClass? = null
             var skippedHeader = !lines[0].startsWith("tsrg2")
+            val methodFieldCount = if (lines[0].split(' ').size >=4) 4 else 3
 
             lines.forEach {
                 if (!skippedHeader) {
@@ -80,7 +81,7 @@ enum class ExternalMappingParser {
                     assert(result.size == prevSize + 1)
                 } else if (it[1] != '\t') {
                     val split = it.subSequence(1, it.length).split(' ')
-                    if (split.size >= 3) {
+                    if (split.size >= methodFieldCount) {
                         val prevSize = lastClassEntry!!.methodMapping.size
                         lastClassEntry!!.methodMapping.add(
                             MappingEntry.Method(
