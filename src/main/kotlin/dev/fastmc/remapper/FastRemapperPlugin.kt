@@ -8,9 +8,11 @@ import java.io.File
 
 class FastRemapperPlugin : Plugin<Project> {
     override fun apply(project: Project) {
-        Shared.mavenCacheDir = File(project.gradle.gradleUserHomeDir, "caches/fast-remapper/maven").also { it.mkdirs() }
-        Shared.globalCacheDir = File(project.gradle.gradleUserHomeDir, "caches/fast-remapper").also { it.mkdirs() }
-        val extension = project.extensions.create("fastRemapper", FastRemapperExtension::class.java).apply {
+        Shared.init(
+            File(project.gradle.gradleUserHomeDir, "caches/fast-remapper/maven"),
+            File(project.gradle.gradleUserHomeDir, "caches/fast-remapper")
+        )
+        project.extensions.create("fastRemapper", FastRemapperExtension::class.java).apply {
             projectCacheDir = File(project.projectDir, ".gradle/fast-remapper").also { it.mkdirs() }
         }
     }

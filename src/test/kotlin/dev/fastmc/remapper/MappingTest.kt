@@ -32,12 +32,10 @@ class MappingTest {
 
         runBlocking {
             val gradleHome = System.getenv("GRADLE_USER_HOME") ?: (System.getProperty("user.home") + "/.gradle")
-            Shared.mavenCacheDir = File(gradleHome, "caches/fast-remapper/maven").also {
-                it.mkdirs()
-            }
-            Shared.globalCacheDir = File(System.getProperty("user.dir"), "build/tmp/fast-remapper-test").also {
-                it.mkdirs()
-            }
+            Shared.init(
+                File(gradleHome, "caches/fast-remapper/maven"),
+                File(System.getProperty("user.dir"), "build/tmp/fast-remapper-test")
+            )
             MappingProvider.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
 
             getMavenVersion("https://files.minecraftforge.net/maven/de/oceanlabs/mcp/mcp_config/maven-metadata.xml")

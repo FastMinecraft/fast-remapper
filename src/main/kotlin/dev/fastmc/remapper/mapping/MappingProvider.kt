@@ -185,6 +185,8 @@ sealed interface MappingProvider<T : MappingName> {
                     file.reader().use { InternalMappingParser.read(it) }
                 } else {
                     val mapping = compute()
+                    file.parentFile.mkdirs()
+                    file.createNewFile()
                     file.writer().use {
                         InternalMappingParser.write(it, mapping)
                     }
