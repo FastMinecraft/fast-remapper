@@ -15,7 +15,8 @@ open class AsmRemapper(private val classMapping: ClassMapping) : Remapper() {
         return classMapping.get(owner)?.fieldMapping?.getNameTo(name) ?: name
     }
 
-    override fun mapType(internalName: String): String {
+    override fun mapType(internalName: String?): String? {
+        if (internalName == null) return null
         return classMapping.getNameTo(internalName) ?: internalName
     }
 }
