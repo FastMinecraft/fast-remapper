@@ -53,7 +53,7 @@ class MappingTest {
                 val map = obj.asJsonObject.asMap().entries.associate { (channel, versions) ->
                     channel to versions.asJsonArray.map {
                         MappingName.Mcp(channel, it.asInt)
-                    }.toSet()
+                    }.toSortedSet()
                 }
                 mcpVersions[McVersion(mcVersion)] = map
             }
