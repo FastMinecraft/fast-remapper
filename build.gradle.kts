@@ -23,7 +23,7 @@ gradlePlugin {
 
 repositories {
     mavenCentral()
-    maven("https://maven.fastmc.dev/")
+    maven("https://maven.luna5ama.dev/")
 }
 
 dependencies {
