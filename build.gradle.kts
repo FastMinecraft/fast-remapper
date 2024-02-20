@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "dev.fastmc"
-version = "1.1.0"
+version = "1.1.1"
 
 plugins {
     kotlin("jvm")
@@ -30,13 +30,13 @@ dependencies {
     testImplementation(kotlin("test"))
 
     implementation(kotlin("stdlib-jdk8"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
 
     implementation("com.google.code.gson:gson:2.10")
-    implementation("it.unimi.dsi:fastutil:8.5.11")
+    implementation("it.unimi.dsi:fastutil:8.5.12")
 
-    implementation("org.ow2.asm:asm-commons:9.4")
-    implementation("org.ow2.asm:asm-tree:9.4")
+    implementation("org.ow2.asm:asm-commons:9.6")
+    implementation("org.ow2.asm:asm-tree:9.6")
     implementation("dev.fastmc:ow2-asm-ktdsl:1.0.0")
 }
 

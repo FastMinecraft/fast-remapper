@@ -1,6 +1,7 @@
 package dev.fastmc.remapper.mapping
 
 import it.unimi.dsi.fastutil.HashCommon
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.objects.ObjectIterator
 import java.util.function.Consumer
 
@@ -8,7 +9,95 @@ interface LongHashCode {
     fun hashCodeLong(): Long
 }
 
-class BackingMap<T : LongHashCode> : MutableCollection<T> {
+sealed interface IBackingMap<T : LongHashCode> : MutableCollection<T> {
+    fun ensureCapacity(newCapacity: Int)
+    fun get(hashCode: Long): LongHashCode?
+    fun addAll(other: IBackingMap<T>)
+}
+
+class WrappedBackingMap<T : LongHashCode> : IBackingMap<T> {
+    private val delegate1 = Long2ObjectOpenHashMap<T>()
+
+    override fun addAll(elements: Collection<T>): Boolean {
+        var result = false
+        for (entry in elements) {
+            result = add(entry) || result
+        }
+        return result
+    }
+
+    override fun ensureCapacity(newCapacity: Int) {
+        delegate1.ensureCapacity(newCapacity)
+    }
+
+    override fun get(hashCode: Long): T? {
+        return delegate1.get(hashCode)
+    }
+
+    override fun addAll(other: IBackingMap<T>) {
+        other as WrappedBackingMap<T>
+        delegate1.putAll(other.delegate1)
+    }
+
+    override val size: Int
+        get() = delegate1.size
+
+    override fun clear() {
+        delegate1.clear()
+    }
+
+    override fun add(element: T): Boolean {
+        return delegate1.put(element.hashCodeLong(), element) == null
+    }
+
+    override fun isEmpty(): Boolean {
+        return delegate1.isEmpty()
+    }
+
+    override fun iterator(): MutableIterator<T> {
+        return delegate1.values.iterator()
+    }
+
+    override fun retainAll(elements: Collection<T>): Boolean {
+        var result = false
+        val iterator = iterator()
+        while (iterator.hasNext()) {
+            val next = iterator.next()
+            if (!elements.contains(next)) {
+                iterator.remove()
+                result = true
+            }
+        }
+        return result
+    }
+
+    override fun removeAll(elements: Collection<T>): Boolean {
+        var result = false
+        for (entry in elements) {
+            result = remove(entry) || result
+        }
+        return result
+    }
+
+    override fun remove(element: T): Boolean {
+        return delegate1.remove(element.hashCodeLong()) != null
+    }
+
+    override fun containsAll(elements: Collection<T>): Boolean {
+        for (entry in elements) {
+            if (!contains(entry)) {
+                return false
+            }
+        }
+        return true
+    }
+
+    override fun contains(element: T): Boolean {
+        return delegate1[element.hashCodeLong()] == element
+    }
+}
+
+class BackingMap<T : LongHashCode> : IBackingMap<T> {
     var bucketA = arrayOfNulls<Any>(16)
     var bucketB = arrayOfNulls<Any>(16)
     private val buckets = arrayOf(bucketA, bucketB)
@@ -215,7 +304,7 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
         return -1
     }
 
-    fun ensureCapacity(newCapacity: Int) {
+    override fun ensureCapacity(newCapacity: Int) {
         if (newCapacity > rehashSize) {
             rehash(resizeShift(newCapacity) - bits)
         }
@@ -238,7 +327,7 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
         return internalAdd(element)
     }
 
-    fun get(hashCode: Long): T? {
+    override fun get(hashCode: Long): T? {
         return internalGet(hashCode)
     }
 
@@ -248,7 +337,8 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
         return result != null
     }
 
-    fun addAll(other: BackingMap<T>) {
+    override fun addAll(other: IBackingMap<T>) {
+        other as BackingMap<T>
         ensureCapacity(size0 + other.size0)
         for (i in 0 until other.capacity) {
             val a = other.bucketA[i]
@@ -334,40 +424,8 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
         return true
     }
 
-    inline fun <reified T> toTArray(): Array<T> {
-        val array = arrayOfNulls<T>(size)
-        var index = 0
-        for (i in 0 until capacity) {
-            val a = bucketA[i]
-            val b = bucketB[i]
-            if (a != null) {
-                array[index++] = a as T
-            }
-            if (b != null) {
-                array[index++] = b as T
-            }
-        }
-        @Suppress("UNCHECKED_CAST")
-        return array as Array<T>
-    }
-
     override fun iterator(): MutableIterator<T> {
         return BackingMapIterator()
-    }
-
-    inline fun forEachFast(action: (T) -> Unit) {
-        for (i in 0 until capacity) {
-            val a = bucketA[i]
-            val b = bucketB[i]
-            if (a != null) {
-                @Suppress("UNCHECKED_CAST")
-                action(a as T)
-            }
-            if (b != null) {
-                @Suppress("UNCHECKED_CAST")
-                action(b as T)
-            }
-        }
     }
 
     override fun forEach(action: Consumer<in T>) {
@@ -420,4 +478,48 @@ class BackingMap<T : LongHashCode> : MutableCollection<T> {
     }
 
     private object RehashException : RuntimeException()
+}
+
+inline fun <reified T : LongHashCode> IBackingMap<T>.toTArray(): Array<T> {
+    return when (this) {
+        is BackingMap -> {
+            val array = arrayOfNulls<T>(size)
+            var index = 0
+            for (i in 0 until capacity) {
+                val a = bucketA[i]
+                val b = bucketB[i]
+                if (a != null) {
+                    array[index++] = a as T
+                }
+                if (b != null) {
+                    array[index++] = b as T
+                }
+            }
+            @Suppress("UNCHECKED_CAST")
+            array as Array<T>
+        }
+        else -> {
+            this.toTypedArray()
+        }
+    }
+}
+
+inline fun <T : LongHashCode> IBackingMap<T>.forEachFast(action: (T) -> Unit) {
+    when (this) {
+        is BackingMap -> {
+            for (i in 0 until capacity) {
+                val a = bucketA[i]
+                val b = bucketB[i]
+                if (a != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    action(a as T)
+                }
+                if (b != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    action(b as T)
+                }
+            }
+        }
+        else -> forEach(action)
+    }
 }

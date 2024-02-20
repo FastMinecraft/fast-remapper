@@ -5,7 +5,7 @@ package dev.fastmc.remapper.mapping
 import it.unimi.dsi.fastutil.objects.*
 
 sealed interface MappingEntryMap<T : MappingEntry> {
-    val backingMap: BackingMap<T>
+    val backingMap: IBackingMap<T>
     val size: Int
 
     fun isEmpty(): Boolean
@@ -27,7 +27,7 @@ fun String.hashCodeLong(): Long {
 
 class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
     MutableMappingEntryMap<T> {
-    override val backingMap = BackingMap<T>()
+    override val backingMap = WrappedBackingMap<T>()
 
     override val size: Int
         get() = backingMap.size
@@ -50,7 +50,7 @@ class MutableMappingEntryMapImpl<T : MappingEntry> internal constructor() :
 
     override fun addAll(entries: MappingEntryMap<in T>) {
         @Suppress("UNCHECKED_CAST")
-        backingMap.addAll(entries.backingMap as BackingMap<T>)
+        backingMap.addAll(entries.backingMap as IBackingMap<T>)
     }
 }
 
